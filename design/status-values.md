@@ -1,6 +1,7 @@
 # Design note — card status values
 
-Status: draft design; to be groomed. Covers roadmap items #4 (obsolete state),
+Status: implemented (PR #2, issue #1). Standing decisions extracted to
+`design/decisions/` (001–005). Covers roadmap items #4 (obsolete state),
 #6 (note states), and #7 (superseding).
 
 ## Problem
