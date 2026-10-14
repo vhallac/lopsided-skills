@@ -25,6 +25,14 @@ LINK_RE = re.compile(
 )
 LINK_KINDS = ("extends", "questions", "supports", "contradicts", "analogous")
 NOTE_FILES = ("zettel.md", "zettel-index.md")
+TRANSITIONS = {
+    ("draft", "verified"),
+    ("verified", "settled"),
+    ("draft", "obsolete"),
+    ("verified", "obsolete"),
+    ("settled", "obsolete"),
+}
+RATIONALE_STATUSES = ("verified", "settled")
 STATE_FILE = ".store-state"
 SKILL_HINT = "see the zettelkasten-notetaking skill for the proper repair procedure"
 GUARD_FILE = "READ-ME-FIRST-use-skill-zettelkasten-notetaking.md"
@@ -605,6 +613,43 @@ def add_link(root: Path, source: str, target: str, kind: str, why: str) -> str:
     return f"OK: linked {source} to {target} ({commit_hash})"
 
 
+def set_status(root: Path, card_id: str, status: str, rationale: str | None) -> str:
+    if status not in STATUSES or status in ("draft", "superseded"):
+        raise StoreError(
+            "set-status target must be one of: verified, settled, obsolete "
+            "(draft is implicit; superseded is set by supersede)"
+        )
+    notes, _cards_path, index_path, cards_text, index_text = read_store(root)
+    require_ticket_match(notes, cards_text, index_text)
+    require_valid(cards_text, index_text)
+    entries = parse_index(index_text, "zettel-index.md", [])
+    entry = next((e for e in entries if e.id == card_id), None)
+    if entry is None:
+        raise StoreError(f"card {card_id} is not in the index")
+    if (entry.status, status) not in TRANSITIONS:
+        raise StoreError(f"illegal transition {entry.status} -> {status}")
+    rationale = rationale.strip() if rationale else ""
+    if status in RATIONALE_STATUSES:
+        if not rationale or "\n" in rationale or "\r" in rationale:
+            raise StoreError(
+                f"transition to {status} requires a one-line --rationale "
+                "(recorded in the local commit message)"
+            )
+    lines = index_text.splitlines()
+    lines[entry.line - 1] = f"{card_id} — {entry.title} [{status}]"
+    candidate_index = "\n".join(lines) + "\n"
+    require_valid(cards_text, candidate_index)
+
+    prepare_history(root)
+    index_path.write_text(candidate_index, encoding="utf-8")
+    require_valid(cards_text, index_path.read_text(encoding="utf-8"))
+    message = f"notes: set {card_id} {status}"
+    if rationale:
+        message = f"{message} — {rationale}"
+    commit_hash = commit(notes, message)
+    return f"OK: set {card_id} to {status} ({commit_hash})"
+
+
 def print_validation(root: Path) -> int:
     _notes, _cards, _index, cards_text, index_text = read_store(root)
     result = validate_text(cards_text, index_text)
@@ -647,6 +692,12 @@ def main() -> int:
     add_link_parser.add_argument("--kind", required=True)
     add_link_parser.add_argument("--why", required=True)
 
+    set_status_parser = commands.add_parser("set-status")
+    set_status_parser.add_argument("root")
+    set_status_parser.add_argument("--id", required=True)
+    set_status_parser.add_argument("--status", required=True)
+    set_status_parser.add_argument("--rationale")
+
     hook_parser = commands.add_parser("hook-verify")
     hook_parser.add_argument("root")
     re_ticket_parser = commands.add_parser("re-ticket")
@@ -661,6 +712,8 @@ def main() -> int:
             print(initialize(root))
         elif args.command == "add-card":
             print(add_card(root, args.id, args.title, body_argument(args)))
+        elif args.command == "set-status":
+            print(set_status(root, args.id, args.status, args.rationale))
         elif args.command == "hook-verify":
             hook_verify(root)
             print("OK: staged note content matches the store state")

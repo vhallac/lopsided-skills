@@ -343,6 +343,70 @@ Duplicate body.
         follow_up = self.run_store(root, "add-card", "--id", "3.1", "--title", "Child claim", "--body", "Body.")
         self.assertEqual(follow_up.returncode, 0, follow_up.stderr)
 
+    def test_set_status_full_ladder_records_rationale_in_commit(self) -> None:
+        root = self.make_store()
+        self.assertEqual(self.run_store(root, "init").returncode, 0)
+
+        result = self.run_store(
+            root, "set-status", "--id", "2", "--status", "verified",
+            "--rationale", "checked against sources",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("2 — Second claim [verified]\n", (root / ".notes/zettel-index.md").read_text())
+
+        result = self.run_store(
+            root, "set-status", "--id", "2", "--status", "settled",
+            "--rationale", "stable and relied upon",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("2 — Second claim [settled]\n", (root / ".notes/zettel-index.md").read_text())
+
+        self.assertIn("notes: set 2 verified — checked against sources", self.git(root, "log", "--format=%s"))
+        self.assertIn("notes: set 2 settled — stable and relied upon", self.git(root, "log", "--format=%s"))
+        self.assertEqual(self.run_store(root, "validate").returncode, 0)
+        self.assertEqual(self.git(root, "status", "--porcelain"), "")
+
+    def test_set_status_to_obsolete_keeps_card_and_links_addressable(self) -> None:
+        root = self.make_store()
+        self.assertEqual(self.run_store(root, "init").returncode, 0)
+        self.assertEqual(
+            self.run_store(root, "add-link", "--from", "2", "--to", "1", "--kind", "extends", "--why", "Refines first.").returncode, 0,
+        )
+
+        result = self.run_store(root, "set-status", "--id", "1", "--status", "obsolete")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        index_text = (root / ".notes/zettel-index.md").read_text()
+        self.assertIn("1 — First claim [obsolete]\n", index_text)
+        self.assertIn("← 2 (extends): Refines first.", (root / ".notes/zettel.md").read_text())
+        self.assertEqual(self.run_store(root, "validate").returncode, 0)
+
+    def test_set_status_rejects_illegal_transitions_and_missing_rationale(self) -> None:
+        root = self.make_store()
+        self.assertEqual(self.run_store(root, "init").returncode, 0)
+        cards_before = (root / ".notes/zettel.md").read_bytes()
+
+        for case in (
+            ("--id", "2", "--status", "settled"),                       # draft -> settled: missing rationale
+            ("--id", "2", "--status", "draft"),                          # not a set-status target
+            ("--id", "2", "--status", "superseded"),                     # reserved for supersede
+            ("--id", "9", "--status", "verified", "--rationale", "r"),   # nonexistent card
+        ):
+            result = self.run_store(root, "set-status", *case)
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+
+        verified = self.run_store(
+            root, "set-status", "--id", "2", "--status", "verified", "--rationale", "r",
+        )
+        self.assertEqual(verified.returncode, 0, verified.stderr)
+        for case in (
+            ("--id", "2", "--status", "verified", "--rationale", "again"),  # verified -> verified
+            ("--id", "1", "--status", "settled", "--rationale", "r"),       # draft -> settled not in ladder
+        ):
+            result = self.run_store(root, "set-status", *case)
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+
+        self.assertEqual(cards_before, (root / ".notes/zettel.md").read_bytes())
+
     def test_re_ticket_refuses_invalid_store(self) -> None:
         root = self.make_store()
         self.assertEqual(self.run_store(root, "init").returncode, 0)
