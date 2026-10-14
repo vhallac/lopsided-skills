@@ -42,7 +42,7 @@ and manual.
   statuses must be deterministic so incremental edits don't drift.
 - **Migration.** None: absence of status means `draft`.
 
-## Open questions — resolved
+## Open questions — Resolved
 
 1. `settled` is advisory-only in v1 (D5): the operator is asked for explicit
    confirmation before a settled mutation; `store.py` never refuses.
