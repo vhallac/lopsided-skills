@@ -153,6 +153,45 @@ Duplicate body.
         self.assertIn("duplicate card ID 1", result.stderr)
         self.assertIn("duplicate index ID 1", result.stderr)
 
+    def test_annotated_index_lines_validate(self) -> None:
+        root = self.make_store(
+            index="""1 — First claim [verified]
+1.1 — Child claim [settled]
+1.1.1 — Grandchild claim [superseded -> 2]
+2 — Second claim [obsolete]
+"""
+        )
+
+        result = self.run_store(root, "validate")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_annotated_index_rejects_unknown_status(self) -> None:
+        root = self.make_store(index="1 — First claim [bogus]\n2 — Second claim\n")
+
+        result = self.run_store(root, "validate")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("expected `ID — Title [status]`", result.stderr)
+
+    def test_annotated_index_rejects_missing_superseded_successor(self) -> None:
+        root = self.make_store(
+            index="1 — First claim [superseded -> 9]\n2 — Second claim\n"
+        )
+
+        result = self.run_store(root, "validate")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("successor 9", result.stderr)
+
+    def test_annotated_index_still_checks_title_match(self) -> None:
+        root = self.make_store(index="1 — Wrong title [verified]\n2 — Second claim\n")
+
+        result = self.run_store(root, "validate")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("title for 1 is 'Wrong title'", result.stderr)
+
     def test_add_link_writes_and_validates_reciprocal_pair(self) -> None:
         root = self.make_store()
         self.assertEqual(self.run_store(root, "init").returncode, 0)

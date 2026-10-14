@@ -13,7 +13,12 @@ from pathlib import Path
 
 ID_PATTERN = r"[0-9]+(?:\.[0-9]+)*"
 ID_RE = re.compile(rf"^{ID_PATTERN}$")
-INDEX_RE = re.compile(rf"^({ID_PATTERN}) — (.+)$")
+INDEX_RE = re.compile(
+    rf"^({ID_PATTERN}) — "
+    rf"((?:[^\[\]]|\[[^\]]*\])*[^\[\]])"
+    rf"(?: \[(draft|verified|settled|obsolete)\]| \[superseded -> ({ID_PATTERN})\])?$"
+)
+STATUSES = ("draft", "verified", "settled", "obsolete", "superseded")
 LINK_RE = re.compile(
     rf"^([→←]) ({ID_PATTERN}) "
     r"\((extends|questions|supports|contradicts|analogous)\): (.+)$"
@@ -58,6 +63,15 @@ class Link:
     target: str
     kind: str
     line: int
+
+
+@dataclass(frozen=True)
+class IndexEntry:
+    id: str
+    title: str
+    line: int
+    status: str
+    successor: str | None
 
 
 @dataclass(frozen=True)
@@ -121,16 +135,25 @@ def parse_cards(text: str, label: str, errors: list[str]) -> list[Card]:
     return cards
 
 
-def parse_index(text: str, label: str, errors: list[str]) -> list[tuple[str, str, int]]:
-    entries: list[tuple[str, str, int]] = []
+def parse_index(text: str, label: str, errors: list[str]) -> list[IndexEntry]:
+    entries: list[IndexEntry] = []
     for line_number, line in enumerate(text.splitlines(), 1):
         if not line.strip():
             continue
         match = INDEX_RE.fullmatch(line)
         if not match:
-            errors.append(f"{label}:{line_number}: expected `ID — Title`")
+            errors.append(f"{label}:{line_number}: expected `ID — Title [status]`")
             continue
-        entries.append((match.group(1), match.group(2), line_number))
+        card_id, title, status, successor = match.groups()
+        entries.append(
+            IndexEntry(
+                id=card_id,
+                title=title,
+                line=line_number,
+                status=status or "draft",
+                successor=successor,
+            )
+        )
     return entries
 
 
@@ -140,7 +163,7 @@ def validate_text(cards_text: str, index_text: str) -> Validation:
     cards = parse_cards(cards_text, "zettel.md", errors)
     entries = parse_index(index_text, "zettel-index.md", errors)
     card_ids = [card.id for card in cards]
-    index_ids = [entry[0] for entry in entries]
+    index_ids = [entry.id for entry in entries]
 
     for card_id in sorted(duplicates(card_ids)):
         errors.append(f"zettel.md: duplicate card ID {card_id}")
@@ -148,23 +171,28 @@ def validate_text(cards_text: str, index_text: str) -> Validation:
         errors.append(f"zettel-index.md: duplicate index ID {card_id}")
 
     card_by_id = {card.id: card for card in cards}
-    index_by_id = {card_id: (title, line) for card_id, title, line in entries}
+    index_by_id = {entry.id: entry for entry in entries}
     for card in cards:
         indexed = index_by_id.get(card.id)
         if indexed is None:
             errors.append(f"zettel-index.md: card {card.id} is missing from index")
-        elif indexed[0] != card.title:
+        elif indexed.title != card.title:
             errors.append(
-                f"zettel-index.md:{indexed[1]}: title for {card.id} is {indexed[0]!r}, "
+                f"zettel-index.md:{indexed.line}: title for {card.id} is {indexed.title!r}, "
                 f"expected {card.title!r}"
             )
         if "." in card.id:
             parent = card.id.rsplit(".", 1)[0]
             if parent not in card_by_id:
                 errors.append(f"zettel.md:{card.line}: parent {parent} does not exist")
-    for card_id, _title, line in entries:
-        if card_id not in card_by_id:
-            errors.append(f"zettel-index.md:{line}: index ID {card_id} has no card")
+    for entry in entries:
+        if entry.id not in card_by_id:
+            errors.append(f"zettel-index.md:{entry.line}: index ID {entry.id} has no card")
+        if entry.successor is not None and entry.successor not in card_by_id:
+            errors.append(
+                f"zettel-index.md:{entry.line}: successor {entry.successor} "
+                f"of superseded card {entry.id} does not exist"
+            )
 
     for card in cards:
         positions = [
