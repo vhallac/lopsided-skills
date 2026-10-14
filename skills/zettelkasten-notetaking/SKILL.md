@@ -10,7 +10,7 @@ A two-file note system designed for LLM maintainers: small, greppable, and alway
 ## Files
 
 - `.notes/zettel.md` — the cards. Hline-separated, append-and-place only.
-- `.notes/zettel-index.md` — the index. One line per card: `ID — Title`. Unsorted by design; short enough to load fully into context on every operation.
+- `.notes/zettel-index.md` — the index. One line per card: `ID — Title`, optionally followed by a status annotation: `ID — Title [verified]` or `ID — Title [superseded -> 4.1]`. Unsorted by design; short enough to load fully into context on every operation.
 - `.notes/.git/` — a nested, local-only Git repository. It records note history and MUST have no configured remote; this skill never pushes it.
 - `.notes/.store-state` — a tamper ticket written and verified by `store.py` on every commit, plus a pre-commit hook in `.notes/.git/hooks/` that rejects commits whose content does not match it. Never read, edit, delete, or recreate this file; never bypass the hook with `--no-verify`.
 - `.notes/READ-ME-FIRST-use-skill-zettelkasten-notetaking.md` — a non-hidden guard/tripwire file. Its imperative name appears in every directory listing, and its content instructs a reader to load this skill. `store.py init` creates it; the pre-commit hook rejects any commit that modifies or deletes it; `store.py` recreates it automatically on every mutating command if it is ever deleted or altered. Treat it as immutable — never edit or delete it yourself.
@@ -86,6 +86,44 @@ the card is not atomic — split it. Ends with zero or more typed link lines:
 - **Body = short.** Feynman test: you must be able to say the idea in one sentence before writing the card. `store.py` rejects bodies over 600 characters and titles over 80; if the idea doesn't fit, split it.
 - **Cold readability.** A card must make sense to someone reading it with no conversation context. No "this conversation", "step 2", "the attack above" — name the things themselves.
 
+## Card status
+
+Every card carries exactly one of five statuses, recorded as an annotation on its index line (the card body itself never carries status):
+
+- `draft` (default — absent annotation means draft): captured, not yet checked.
+- `verified`: claims checked against sources; a rationale is recorded in the local commit message.
+- `settled`: stable and relied upon. Mutating or superseding a `settled` card requires operator confirmation first (advisory gate — see Guardrails; `store.py` will not refuse).
+- `obsolete`: the idea is dropped. The card stays addressable by ID and by inbound links (children and links stay in place); it is only dropped out of discovery.
+- `superseded`: the idea is replaced. The annotation names the successor: `[superseded -> <id>]`.
+
+Reading rules:
+
+- Resolving an `obsolete` card by ID or inbound link returns the card as usual — read it with its status visible; addressability is unaffected by discovery exclusion.
+- Resolving a `superseded` card surfaces the successor: follow the annotation's `-> <id>` reference and read that card. Inbound links are never rewritten — the redirect happens at resolution time, not in the link lines.
+
+Transition statuses only through `store.py`:
+
+```sh
+python3 <skill-directory>/scripts/store.py set-status <project-root> \
+  --id "<card-id>" --status "verified|settled|obsolete" --rationale "<why>"
+```
+
+`set-status` accepts `verified`, `settled`, and `obsolete` only, moving along `draft → verified → settled` or to `obsolete` from any trust level. Illegal transitions, unknown statuses, and missing rationale are rejected. The rationale is recorded in the local store commit message — the store's git history is the audit trail.
+
+## Operation: Supersede a card
+
+When a better idea replaces an existing one, supersede it — never delete or rewrite the old card:
+
+1. Confirm the replacement with the operator if the old card is `settled` (advisory gate).
+2. Compose the successor's claim title and body as for Write a card.
+3. Run one command; it captures the successor (next available ID, content-validated like `add-card`), annotates the old card `[superseded -> <successor-id>]`, validates, and commits both changes atomically:
+   ```sh
+   python3 <skill-directory>/scripts/store.py supersede <project-root> \
+     --id "<old-card-id>" --title "<claim-title>" --body-file "<body-file>" \
+     --rationale "<why the replacement>"
+   ```
+4. Do not rewrite inbound links of the old card — resolution-time redirect (see Card status) makes them point readers to the successor.
+
 ## Operation: Write a card
 
 The index is in-context for every write. Do not grep for ideas; grep only for locations.
@@ -109,7 +147,7 @@ Never move, renumber, or rewrite existing cards during a write. If an existing c
 
 ## Operation: Link search
 
-Runs on every new card. Also invocable on demand for a set of IDs.
+Runs on every new card. Also invocable on demand for a set of IDs. Skip index entries annotated `[obsolete]` or `[superseded -> ...]` when shortlisting candidates (discovery exclusion); explicit resolution of such a card follows the Card status reading rules.
 
 Search in three passes, using the index first and reading candidate cards:
 
@@ -134,6 +172,8 @@ The command writes `→` in the source card and `←` in the target card, then v
 Prefer few meaningful links over many shallow ones. Rank candidates by: meaning-depth, specificity, leverage (does this link change how either card reads?).
 
 ## Operation: Search / retrieve
+
+**Discovery exclusion:** scan index titles but skip entries annotated `[obsolete]` or `[superseded -> ...]`. The index stays complete — exclusion is behavioral, never deletion. Explicitly resolving an excluded card by ID or inbound link is still allowed and follows the Card status reading rules.
 
 - By ID set: grep the index for IDs, then read those cards.
 - By topic: scan index titles, shortlist, read full cards. Same discipline as Write steps 2–3.
@@ -161,7 +201,7 @@ errors and repair only the affected cards or index entries.
 Surfaces unearthed correlations. Invoke on demand or when the user asks for discovery.
 
 1. Pick a mode: `random` (any card), `theme` (any card, then walk its links), `time` (oldest untouched card), `cross` (two cards from distant branches).
-2. Sample IDs from the index; read the cards.
+2. Sample IDs from the index (skip `obsolete` and `superseded` entries); read the cards.
 3. Ask the three link questions: What does this connect to that I hadn't noticed? What does it contradict? What does it now explain?
 4. If a link emerges, add it through `store.py add-link` (typed, with why, both directions).
 5. If no signal: record why in the walk output and stop. Do not force a link.
@@ -170,7 +210,7 @@ Surfaces unearthed correlations. Invoke on demand or when the user asks for disc
 
 Trigger: every ~15 new cards, or on demand. This is the integration check.
 
-1. **Integration** — do the new cards sit cleanly, or do recent additions contradict/duplicate older ones? Report; fix only by linking, never by rewriting old cards.
+1. **Integration** — do the new cards sit cleanly, or do recent additions contradict/duplicate older ones? Report; fix only by linking, never by rewriting old cards. Exclude `obsolete` and `superseded` entries from the health scan.
 2. **Orphans** — cards with no inbound or outbound links. Try a link search for each; if truly orphan, flag to the user.
 3. **Tertiary links** — if new card A links to B and to C, check whether B–C also merits a link. Secondary links of recent cards can also earn a direct link to the new card.
 4. Report health: orphan count and rate, average link degree, and any contradiction pairs found. Interpret the structural metrics using these rough bands:
@@ -185,4 +225,6 @@ Trigger: every ~15 new cards, or on demand. This is the integration check.
 - Never hand-edit, delete, or regenerate `.notes/.store-state`, and never commit with `--no-verify`; both exist to catch hand edits.
 - Tags are deliberately deferred. Do not invent a tag system.
 - Keep bodies short: at most 600 characters and 80-character titles — `store.py` rejects longer. If the idea doesn't fit, split it and link the parts. (Existing cards are immutable; the cap binds new writes only.)
-- A card may be superseded by a newer card through typed links; do not delete or rewrite it under the current append-and-place policy. Any future mutability policy must preserve resolvable IDs and reciprocal links.
+- Cards move through the trust ladder only via `store.py set-status` / `supersede` (see Card status); do not delete or rewrite cards under the current append-and-place policy.
+- **Advisory `settled` gate (D5):** before transitioning or superseding a `settled` card, confirm with the operator first. `store.py` does not enforce this — the check is yours.
+- Do not rewrite inbound links of `superseded` cards; resolution-time redirect handles readers.
