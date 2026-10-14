@@ -153,6 +153,8 @@ def parse_index(text: str, label: str, errors: list[str]) -> list[IndexEntry]:
             errors.append(f"{label}:{line_number}: expected `ID — Title [status]`")
             continue
         card_id, title, status, successor = match.groups()
+        if successor is not None:
+            status = "superseded"
         entries.append(
             IndexEntry(
                 id=card_id,
@@ -650,6 +652,52 @@ def set_status(root: Path, card_id: str, status: str, rationale: str | None) -> 
     return f"OK: set {card_id} to {status} ({commit_hash})"
 
 
+def next_available_id(cards: list[Card]) -> str:
+    """The next top-level card ID, matching the expected_id rule for new roots."""
+    tops = [int(card.id) for card in cards if "." not in card.id]
+    return str(max(tops, default=0) + 1)
+
+
+def supersede(root: Path, card_id: str, title: str, body: str, rationale: str | None) -> str:
+    notes, cards_path, index_path, cards_text, index_text = read_store(root)
+    require_ticket_match(notes, cards_text, index_text)
+    require_valid(cards_text, index_text)
+    errors: list[str] = []
+    cards = parse_cards(cards_text, "zettel.md", errors)
+    if errors:
+        raise StoreError("; ".join(errors))
+    if card_id not in {card.id for card in cards}:
+        raise StoreError(f"card {card_id} does not exist")
+    entries = parse_index(index_text, "zettel-index.md", [])
+    entry = next((e for e in entries if e.id == card_id), None)
+    if entry is None:
+        raise StoreError(f"card {card_id} is not in the index")
+    if entry.status == "superseded":
+        raise StoreError(f"card {card_id} is already superseded")
+    title, body = validate_card_content(title, body)
+    successor_id = next_available_id(cards)
+
+    candidate_cards = "\n".join(
+        [*cards_text.splitlines(), *render_card(successor_id, title, body)]
+    ) + "\n"
+    lines = index_text.splitlines()
+    lines[entry.line - 1] = f"{card_id} — {entry.title} [superseded -> {successor_id}]"
+    candidate_index = "\n".join([*lines, f"{successor_id} — {title}"]) + "\n"
+    require_valid(candidate_cards, candidate_index)
+
+    prepare_history(root)
+    cards_path.write_text(candidate_cards, encoding="utf-8")
+    index_path.write_text(candidate_index, encoding="utf-8")
+    require_valid(
+        cards_path.read_text(encoding="utf-8"), index_path.read_text(encoding="utf-8")
+    )
+    message = f"notes: supersede {card_id} by {successor_id}"
+    if rationale and rationale.strip():
+        message = f"{message} — {rationale.strip()}"
+    commit_hash = commit(notes, message)
+    return f"OK: superseded {card_id} by {successor_id} ({commit_hash})"
+
+
 def print_validation(root: Path) -> int:
     _notes, _cards, _index, cards_text, index_text = read_store(root)
     result = validate_text(cards_text, index_text)
@@ -698,6 +746,15 @@ def main() -> int:
     set_status_parser.add_argument("--status", required=True)
     set_status_parser.add_argument("--rationale")
 
+    supersede_parser = commands.add_parser("supersede")
+    supersede_parser.add_argument("root")
+    supersede_parser.add_argument("--id", required=True)
+    supersede_parser.add_argument("--title", required=True)
+    body_group = supersede_parser.add_mutually_exclusive_group(required=True)
+    body_group.add_argument("--body")
+    body_group.add_argument("--body-file")
+    supersede_parser.add_argument("--rationale")
+
     hook_parser = commands.add_parser("hook-verify")
     hook_parser.add_argument("root")
     re_ticket_parser = commands.add_parser("re-ticket")
@@ -714,6 +771,8 @@ def main() -> int:
             print(add_card(root, args.id, args.title, body_argument(args)))
         elif args.command == "set-status":
             print(set_status(root, args.id, args.status, args.rationale))
+        elif args.command == "supersede":
+            print(supersede(root, args.id, args.title, body_argument(args), args.rationale))
         elif args.command == "hook-verify":
             hook_verify(root)
             print("OK: staged note content matches the store state")

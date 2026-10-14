@@ -407,6 +407,76 @@ Duplicate body.
 
         self.assertEqual(cards_before, (root / ".notes/zettel.md").read_bytes())
 
+    def test_supersede_captures_successor_and_annotates_in_one_commit(self) -> None:
+        root = self.make_store()
+        self.assertEqual(self.run_store(root, "init").returncode, 0)
+        head_before = self.git(root, "rev-parse", "HEAD")
+
+        result = self.run_store(
+            root, "supersede", "--id", "2",
+            "--title", "Better claim",
+            "--body", "Sharper body.",
+            "--rationale", "replaces 2 with a stronger argument",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("superseded 2 by 3", result.stdout)
+        cards = (root / ".notes/zettel.md").read_text(encoding="utf-8")
+        self.assertIn("# 3", cards)
+        self.assertIn("## Better claim", cards)
+        self.assertIn("Sharper body.", cards)
+        index_text = (root / ".notes/zettel-index.md").read_text()
+        self.assertIn("2 — Second claim [superseded -> 3]\n", index_text)
+        self.assertIn("3 — Better claim\n", index_text)
+        self.assertEqual(self.run_store(root, "validate").returncode, 0)
+        # Atomic: exactly one new commit carrying both changes.
+        subjects = self.git(root, "log", "--format=%s").splitlines()
+        self.assertEqual(subjects[0], "notes: supersede 2 by 3 — replaces 2 with a stronger argument")
+        self.assertEqual(head_before, self.git(root, "rev-parse", "HEAD^"))
+        self.assertEqual(self.git(root, "status", "--porcelain"), "")
+
+    def test_supersede_never_rewrites_inbound_links(self) -> None:
+        root = self.make_store()
+        self.assertEqual(self.run_store(root, "init").returncode, 0)
+        self.assertEqual(
+            self.run_store(root, "add-link", "--from", "2", "--to", "1", "--kind", "extends", "--why", "Refines first.").returncode, 0,
+        )
+        link_lines_before = [
+            line for line in (root / ".notes/zettel.md").read_text(encoding="utf-8").splitlines()
+            if line.startswith(("→", "←"))
+        ]
+
+        result = self.run_store(
+            root, "supersede", "--id", "2", "--title", "Better claim", "--body", "Sharper body.",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        link_lines_after = [
+            line for line in (root / ".notes/zettel.md").read_text(encoding="utf-8").splitlines()
+            if line.startswith(("→", "←"))
+        ]
+        self.assertEqual(link_lines_before, link_lines_after)
+        self.assertEqual(self.run_store(root, "validate").returncode, 0)
+
+    def test_supersede_rejects_already_superseded_card_unchanged(self) -> None:
+        root = self.make_store()
+        self.assertEqual(self.run_store(root, "init").returncode, 0)
+        self.assertEqual(
+            self.run_store(root, "supersede", "--id", "2", "--title", "Better claim", "--body", "Sharper body.").returncode, 0,
+        )
+        cards_before = (root / ".notes/zettel.md").read_bytes()
+        index_before = (root / ".notes/zettel-index.md").read_bytes()
+
+        result = self.run_store(root, "supersede", "--id", "2", "--title", "Another claim", "--body", "Body.")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("already superseded", result.stderr)
+        self.assertEqual(cards_before, (root / ".notes/zettel.md").read_bytes())
+        self.assertEqual(index_before, (root / ".notes/zettel-index.md").read_bytes())
+
+        # supersede of a nonexistent card is rejected too
+        result = self.run_store(root, "supersede", "--id", "9", "--title", "X", "--body", "Y")
+        self.assertNotEqual(result.returncode, 0)
+
     def test_re_ticket_refuses_invalid_store(self) -> None:
         root = self.make_store()
         self.assertEqual(self.run_store(root, "init").returncode, 0)
