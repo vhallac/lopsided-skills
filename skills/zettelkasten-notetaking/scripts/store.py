@@ -13,11 +13,12 @@ from pathlib import Path
 
 ID_PATTERN = r"[0-9]+(?:\.[0-9]+)*"
 ID_RE = re.compile(rf"^{ID_PATTERN}$")
-INDEX_RE = re.compile(
+INDEX_ANNOTATED_RE = re.compile(
     rf"^({ID_PATTERN}) — "
-    rf"((?:[^\[\]]|\[[^\]]*\])*[^\[\]])"
-    rf"(?: \[(draft|verified|settled|obsolete)\]| \[superseded -> ({ID_PATTERN})\])?$"
+    rf"(.*) "
+    rf"(?:\[(draft|verified|settled|obsolete)\]|\[superseded → ({ID_PATTERN})\])$"
 )
+INDEX_RE = re.compile(rf"^({ID_PATTERN}) — (.+)$")
 STATUSES = ("draft", "verified", "settled", "obsolete", "superseded")
 LINK_RE = re.compile(
     rf"^([→←]) ({ID_PATTERN}) "
@@ -148,11 +149,13 @@ def parse_index(text: str, label: str, errors: list[str]) -> list[IndexEntry]:
     for line_number, line in enumerate(text.splitlines(), 1):
         if not line.strip():
             continue
-        match = INDEX_RE.fullmatch(line)
+        annotated = INDEX_ANNOTATED_RE.fullmatch(line)
+        match = annotated or INDEX_RE.fullmatch(line)
         if not match:
             errors.append(f"{label}:{line_number}: expected `ID — Title [status]`")
             continue
-        card_id, title, status, successor = match.groups()
+        status, successor = (annotated.group(3), annotated.group(4)) if annotated else (None, None)
+        card_id, title = match.group(1), match.group(2)
         if successor is not None:
             status = "superseded"
         entries.append(
@@ -681,7 +684,7 @@ def supersede(root: Path, card_id: str, title: str, body: str, rationale: str | 
         [*cards_text.splitlines(), *render_card(successor_id, title, body)]
     ) + "\n"
     lines = index_text.splitlines()
-    lines[entry.line - 1] = f"{card_id} — {entry.title} [superseded -> {successor_id}]"
+    lines[entry.line - 1] = f"{card_id} — {entry.title} [superseded → {successor_id}]"
     candidate_index = "\n".join([*lines, f"{successor_id} — {title}"]) + "\n"
     require_valid(candidate_cards, candidate_index)
 

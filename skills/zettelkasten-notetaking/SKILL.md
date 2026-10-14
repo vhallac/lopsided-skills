@@ -10,7 +10,7 @@ A two-file note system designed for LLM maintainers: small, greppable, and alway
 ## Files
 
 - `.notes/zettel.md` — the cards. Hline-separated, append-and-place only.
-- `.notes/zettel-index.md` — the index. One line per card: `ID — Title`, optionally followed by a status annotation: `ID — Title [verified]` or `ID — Title [superseded -> 4.1]`. Unsorted by design; short enough to load fully into context on every operation.
+- `.notes/zettel-index.md` — the index. One line per card: `ID — Title`, optionally followed by a status annotation: `ID — Title [verified]` or `ID — Title [superseded → 4.1]`. Unsorted by design; short enough to load fully into context on every operation.
 - `.notes/.git/` — a nested, local-only Git repository. It records note history and MUST have no configured remote; this skill never pushes it.
 - `.notes/.store-state` — a tamper ticket written and verified by `store.py` on every commit, plus a pre-commit hook in `.notes/.git/hooks/` that rejects commits whose content does not match it. Never read, edit, delete, or recreate this file; never bypass the hook with `--no-verify`.
 - `.notes/READ-ME-FIRST-use-skill-zettelkasten-notetaking.md` — a non-hidden guard/tripwire file. Its imperative name appears in every directory listing, and its content instructs a reader to load this skill. `store.py init` creates it; the pre-commit hook rejects any commit that modifies or deletes it; `store.py` recreates it automatically on every mutating command if it is ever deleted or altered. Treat it as immutable — never edit or delete it yourself.
@@ -94,12 +94,12 @@ Every card carries exactly one of five statuses, recorded as an annotation on it
 - `verified`: claims checked against sources; a rationale is recorded in the local commit message.
 - `settled`: stable and relied upon. Mutating or superseding a `settled` card requires operator confirmation first (advisory gate — see Guardrails; `store.py` will not refuse).
 - `obsolete`: the idea is dropped. The card stays addressable by ID and by inbound links (children and links stay in place); it is only dropped out of discovery.
-- `superseded`: the idea is replaced. The annotation names the successor: `[superseded -> <id>]`.
+- `superseded`: the idea is replaced. The annotation names the successor: `[superseded → <id>]`.
 
 Reading rules:
 
 - Resolving an `obsolete` card by ID or inbound link returns the card as usual — read it with its status visible; addressability is unaffected by discovery exclusion.
-- Resolving a `superseded` card surfaces the successor: follow the annotation's `-> <id>` reference and read that card. Inbound links are never rewritten — the redirect happens at resolution time, not in the link lines.
+- Resolving a `superseded` card surfaces the successor: follow the annotation's `→ <id>` reference and read that card. Inbound links are never rewritten — the redirect happens at resolution time, not in the link lines.
 
 Transition statuses only through `store.py`:
 
@@ -116,7 +116,7 @@ When a better idea replaces an existing one, supersede it — never delete or re
 
 1. Confirm the replacement with the operator if the old card is `settled` (advisory gate).
 2. Compose the successor's claim title and body as for Write a card.
-3. Run one command; it captures the successor (next available ID, content-validated like `add-card`), annotates the old card `[superseded -> <successor-id>]`, validates, and commits both changes atomically:
+3. Run one command; it captures the successor (next available ID, content-validated like `add-card`), annotates the old card `[superseded → <successor-id>]`, validates, and commits both changes atomically:
    ```sh
    python3 <skill-directory>/scripts/store.py supersede <project-root> \
      --id "<old-card-id>" --title "<claim-title>" --body-file "<body-file>" \
@@ -147,7 +147,7 @@ Never move, renumber, or rewrite existing cards during a write. If an existing c
 
 ## Operation: Link search
 
-Runs on every new card. Also invocable on demand for a set of IDs. Skip index entries annotated `[obsolete]` or `[superseded -> ...]` when shortlisting candidates (discovery exclusion); explicit resolution of such a card follows the Card status reading rules.
+Runs on every new card. Also invocable on demand for a set of IDs. Skip index entries annotated `[obsolete]` or `[superseded → ...]` when shortlisting candidates (discovery exclusion); explicit resolution of such a card follows the Card status reading rules.
 
 Search in three passes, using the index first and reading candidate cards:
 
@@ -173,7 +173,7 @@ Prefer few meaningful links over many shallow ones. Rank candidates by: meaning-
 
 ## Operation: Search / retrieve
 
-**Discovery exclusion:** scan index titles but skip entries annotated `[obsolete]` or `[superseded -> ...]`. The index stays complete — exclusion is behavioral, never deletion. Explicitly resolving an excluded card by ID or inbound link is still allowed and follows the Card status reading rules.
+**Discovery exclusion:** scan index titles but skip entries annotated `[obsolete]` or `[superseded → ...]`. The index stays complete — exclusion is behavioral, never deletion. Explicitly resolving an excluded card by ID or inbound link is still allowed and follows the Card status reading rules.
 
 - By ID set: grep the index for IDs, then read those cards.
 - By topic: scan index titles, shortlist, read full cards. Same discipline as Write steps 2–3.

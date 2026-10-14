@@ -157,7 +157,7 @@ Duplicate body.
         root = self.make_store(
             index="""1 — First claim [verified]
 1.1 — Child claim [settled]
-1.1.1 — Grandchild claim [superseded -> 2]
+1.1.1 — Grandchild claim [superseded → 2]
 2 — Second claim [obsolete]
 """
         )
@@ -166,17 +166,58 @@ Duplicate body.
 
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_annotated_index_rejects_unknown_status(self) -> None:
-        root = self.make_store(index="1 — First claim [bogus]\n2 — Second claim\n")
+    def test_pre_change_store_with_bracket_titles_validates_unchanged(self) -> None:
+        cards = """---
+
+# 1
+
+## Costs [USD]
+
+Body.
+
+---
+
+# 2
+
+## Weird ] title
+
+Body.
+
+---
+
+# 3
+
+## Nested [a [b]] c
+
+Body.
+"""
+        root = self.make_store(
+            cards=cards,
+            index="1 — Costs [USD]\n2 — Weird ] title\n3 — Nested [a [b]] c\n",
+        )
 
         result = self.run_store(root, "validate")
 
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("expected `ID — Title [status]`", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_unknown_bracket_suffix_is_treated_as_title(self) -> None:
+        cards = """---
+
+# 1
+
+## First claim [bogus]
+
+Body.
+"""
+        root = self.make_store(cards=cards, index="1 — First claim [bogus]\n")
+
+        result = self.run_store(root, "validate")
+
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_annotated_index_rejects_missing_superseded_successor(self) -> None:
         root = self.make_store(
-            index="1 — First claim [superseded -> 9]\n2 — Second claim\n"
+            index="1 — First claim [superseded → 9]\n2 — Second claim\n"
         )
 
         result = self.run_store(root, "validate")
@@ -426,7 +467,7 @@ Duplicate body.
         self.assertIn("## Better claim", cards)
         self.assertIn("Sharper body.", cards)
         index_text = (root / ".notes/zettel-index.md").read_text()
-        self.assertIn("2 — Second claim [superseded -> 3]\n", index_text)
+        self.assertIn("2 — Second claim [superseded → 3]\n", index_text)
         self.assertIn("3 — Better claim\n", index_text)
         self.assertEqual(self.run_store(root, "validate").returncode, 0)
         # Atomic: exactly one new commit carrying both changes.

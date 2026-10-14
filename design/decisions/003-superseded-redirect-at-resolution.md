@@ -10,7 +10,7 @@ redirecting at resolution time.
 
 ## Decision
 
-Redirect happens at resolution time: the `[superseded -> <id>]` annotation
+Redirect happens at resolution time: the `[superseded → <id>]` annotation
 resolves to the successor when the old card is addressed. Inbound links are
 never rewritten. Redirect-on-resolution is behavioral — index annotation plus
 a SKILL.md reading rule — not a `store.py resolve/get` subcommand (that would

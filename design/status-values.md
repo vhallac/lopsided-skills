@@ -48,10 +48,10 @@ and manual.
 1. `settled` is advisory-only in v1 (D5): the operator is asked for explicit
    confirmation before a settled mutation; `store.py` never refuses.
 2. Status lives inline as an index-line annotation
-   (`[draft|verified|settled|obsolete]` or `[superseded -> <id>]`); absence
+   (`[draft|verified|settled|obsolete]` or `[superseded → <id>]`); absence
    means `draft`. Card bodies stay untouched.
 3. `superseded` redirects at resolution time: inbound links are never
-   rewritten (D2); the `[superseded -> <id>]` annotation resolves to the
+   rewritten (D2); the `[superseded → <id>]` annotation resolves to the
    successor when the old card is addressed.
 4. Transitions record a rationale (via `set-status --rationale`), which is
    carried into the local store commit message (D3).
