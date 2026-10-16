@@ -24,6 +24,24 @@ _Extension / Failure Scenarios:_
 
 ---
 
+## Goal Levels
+
+Cockburn classifies use cases by the altitude of the goal they capture:
+
+- **Cloud:** the strategic goal of the whole enterprise — too high to groom.
+- **Kite (summary/umbrella):** a goal spanning multiple actors or multiple sittings — a program or epic. Served by other use cases; nothing observable happens "in one sitting" at this level.
+- **Sea level:** an actor's goal achieved in one sitting: one actor, one goal, an observable result when the sitting ends. The normal level for a story or task.
+- **Underwater (subfunction):** steps that serve a sea-level goal but are never a goal in themselves — validate, parse, persist, log. Discovered during implementation, not groomed as use cases.
+
+**Sea-level anchor test:** a use case anchors at sea level when it can be stated as *`<actor>` wants `<goal>` so that `<observable outcome>`* and the outcome is observable in one sitting. Failures:
+
+- No single actor, or the outcome takes many sittings → a **kite**: write one umbrella summary use case, then groom sea-level children under it. Never groom the kite itself.
+- The statement only makes sense as a step inside another use case ("validate the payload", "persist the record") → **underwater**: merge it upward into that use case's steps or extensions.
+
+When in doubt, anchor at sea level and let extensions carry the detail — see below.
+
+---
+
 ## Structure
 
 ### 1. Main Path / Extension Pattern
@@ -306,6 +324,10 @@ _Main Success Scenario:_
 
 ---
 
+## Extension-First Precision
+
+Precision in a specification comes primarily from **enumerating extensions**, not from densifying the main path. The main scenario stays a thin happy-path spine; the edge cases — "closed then reopened", "reviewer requests changes", "merge conflicts" — are named as extensions in the `k.a` format above. If a groomed use case feels imprecise, the fix is to enumerate more extensions, not to add detail to the main scenario.
+
 ## One-Sentence Summary
 
-Keep the main scenario as the tree's happy-path spine, push every alternative to a sibling extension with alternating numeric/alpha numbering, and extract deep branches into sub use cases.
+Keep the main scenario as the tree's happy-path spine, push every alternative to a sibling extension with alternating numeric/alpha numbering, extract deep branches into sub use cases, and anchor every use case at sea level — precision comes from enumerated extensions, not from a densified main path.

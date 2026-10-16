@@ -94,18 +94,28 @@ When invoked for a phase other than grooming — "review this closed set", "fix 
 
 ## Use-case altitude and actors
 
-- **Parent/epic issue:** 10000ft summary use case tree; each node delegates to a sub-issue's use case.
-- **Story/task issues:** medium level — user goal, main success scenario, extension scenarios. Sea-level detail only when the product owner asks for it.
+- **Goal levels** come from `use-case-writing/cockburn-style.md` (cloud / kite / sea level / underwater). A story or task anchors at **sea level**: one actor, one goal, an observable "done in one sitting" outcome. The sea-level anchor is mandatory — if the goal cannot be stated at sea level, it is a kite epic (write one umbrella summary, then groom sea-level children under it) or an underwater subfunction (merge it upward into another story). "Medium level" guidance is superseded by the anchor rule.
+- **Step phrasing:** steps describe actor actions or system responses, never mechanisms. "Author opens an MR" is right; "calls POST /merge-requests" or "a diff viewer is rendered" is implementation leaking in. Test: *would the step still be true if the implementation changed?* If not, it is too low.
+- **Extension-first precision:** grooming precision comes from enumerating extensions in the Cockburn extension format — not from densifying the main path. If a use case feels imprecise, enumerate more extensions.
+- **Underwater prohibition:** subfunction steps (validate, parse, persist) are discovered at implementation. If a groomed main path reads like a subfunction, it is a step of another story — merge upward.
 - Structure follows the `use-case-writing` skill (Cockburn style — read its `cockburn-style.md`). GitHub markdown, not the JIRA/Confluence formatting from `story-writing`.
 - **Actors:** modules and extensions are indistinguishable from this perspective — either can be an actor, including an extension that "publishes a context section" to another component. The human user appears as an actor only where user-visible interaction exists.
+
+**Altitude checklist** (run per node; also part of Before stopping):
+
+1. Actor and goal — can they be named?
+2. What does "done in one sitting" look like, observably?
+3. Are steps phrased as actor actions / system responses — implementation-neutral?
+4. Are extensions enumerated and phrased the same way?
 
 ## Grooming order
 
 Depth-first, one node at a time:
 
 1. Groom the node to completion at its own altitude — no open questions, use case stands.
-2. Then move down: groom each child the same way. When children do not exist yet, generate them from the groomed use case first.
-3. Tasks are groomed only at the last responsible moment — when their story is groomed to completion and the task is next to be implemented — never as a batch.
+2. Anchor the node with the sea-level anchor test (see Use-case altitude and actors). A node that fails the test as a kite gets one umbrella summary use case, and its sea-level children are groomed under it — never the kite itself; a node that fails as underwater is a step of another story — merge it upward.
+3. Then move down: groom each child the same way. When children do not exist yet, generate them from the groomed use case first.
+4. Tasks are groomed only at the last responsible moment — when their story is groomed to completion and the task is next to be implemented — never as a batch.
 
 - The child list is provisional until the parent is groomed to completion: map existing children onto the groomed use case — kept, rewritten, merged, or dropped — and only then generate what is missing.
 - Decision-shaped and constraint-shaped items ("how should we handle X?", "everything must pass gate Y") are not work units — absorb them into the parent's use case or constraints when that parent is groomed.
@@ -143,4 +153,5 @@ Filling gaps from sources is not enough — the characteristic failure of a good
 - **Split test:** if the node hides several independently verifiable changes, split it — or record why it stays whole.
 - Every open question is numbered, fits in one line, says what a good answer unblocks, and carries options, the architect's recommendation, and the default that applies if it goes unanswered.
 - Anything in product-owner territory is raised as a comment question — not silently decided, not silently left open.
+- **Altitude checklist:** the four questions from Use-case altitude and actors pass for every node — actor and goal named, "done in one sitting" observable, steps implementation-neutral, extensions enumerated and phrased the same way.
 - **Mechanical gate:** extension numbering follows `use-case-writing` rules consistently, every link resolves, and the implementation plan contains no grooming-ritual steps — an implementer executes implementation, not grooming or review chores.
