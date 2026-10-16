@@ -162,7 +162,10 @@ tracked:
   shows the stream, `git branch --show-current` inside it (or `jj` equivalent).
   Fold it into unit-001 if the first real unit is itself trivial; never as a
   stand-alone unit followed by another trivial unit.
-- **Tail unit** — push the branch, open the PR referencing the issue, and post
+- **Tail unit** — push the branch, open the PR, and post. When the PR's work
+  resolves a known issue, include the closing keyword (`Closes #N` / `Fixes #N`)
+  in the PR body — the merge then closes the issue automatically instead of
+  requiring manual closure. Then post
   an **account** comment on the issue covering: the claims the change makes
   (required behaviour, in the spec's vocabulary); the evidence for each claim
   (check, test, invariant, inspection — labelled); what remains unverified,
