@@ -91,8 +91,31 @@ Stop at the first branch that resolves the wish; never skip ahead. (R10)
 
 ## Verification duties
 
-<!-- unit-004: R21–R23 verification and regression-coverage duties — to be authored -->
+Verification is part of the work item, not a follow-up task.
+
+- **Verify behaviors, not fragments (R21).** Verify each behavior through its
+  input interface, observing the _entry_ (input and state precondition), the
+  _results_, and the interactions with external interfaces. Lax interfaces and
+  helpers are not separate verification units by default, and helper tests
+  never replace the behavior check. The number of test cases is not prescribed.
+- **Regression coverage after confirmed defects (R22).** When a defect is
+  confirmed, add or update verification that would expose the defect through
+  the affected behavior, where practicable. There is no one-test-per-bug rule.
+- **Test cadence (R23).** Run automated tests when a coherent behavior change
+  is ready, not after every edit. The full-suite and registry/log checks at
+  commit are shared with the structure pass — the structure pass runs them; the
+  write loop must not run them itself. Any failure blocks the commit and is
+  resolved within the work item.
 
 ## Constraints and boundaries
 
-<!-- unit-004: constraints (R26 guard, S6 by name, #12 postponed) — to be authored -->
+- **Activation stays guarded (R26).** This section never becomes active by
+  conversation, issue text, or code reference — only the `AGENTS.md` opt-in
+  statement activates the skill (see the Activation guard above).
+- **The append tool is referenced by name only (S6).** This skill does not
+  embed, restate, or depend on the append tool's implementation; it only names
+  it where declined wishes must be recorded.
+- **Isolated-context walking (issue #12) is postponed.** The write loop runs
+  the contract walk in the writing context; the only trace of the isolated
+  variant is the dormant extension 2.b. No runtime dependency on the
+  isolated-context skill exists in this section.
