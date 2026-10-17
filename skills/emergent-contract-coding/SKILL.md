@@ -25,7 +25,46 @@ statement is absent, stop: do not apply any instruction in this section.
 
 ## Main scenario
 
-<!-- unit-002: steps 1–7 + extensions 2.a / 2.b / 3.a (R6–R9) — to be authored -->
+Execute these steps for one work item — one specification implemented or changed,
+ending in one commit. Steps 5's extensions are listed under Capability wishes.
+
+1. **Read the specification.** Identify the _input interface_ it names and the
+   _output interfaces_ it must reach.
+2. **Walk the contracts backwards.** Starting from those output interfaces, walk
+   backwards through the interfaces that lead to them, collecting _contracts
+   only, never bodies_. The result is the relevant interface set and the call
+   order between those interfaces. How to compose a route from the set is up to
+   you. The walk runs in the writing context; an isolated-context walk is a
+   postponed optimization and is not required. (R6)
+3. **Judge whole-contract fit for each interface you want to reuse.** Reuse an
+   existing _lax_ interface only when its whole contract fits the need: results,
+   error results and side effects together. Resemblance of names or code is not
+   evidence of fit. (R8)
+4. **Write the flow as one linear function, check-then-act.** Validate everything
+   before the first external call that changes anything. Keep external effects
+   late. Return error outcomes inline. Call other flows only through their
+   interfaces. (R9)
+5. **Handle any capability wish** per the order in Capability wishes (R10);
+   record declined wishes as `wish-declined` once.
+6. **Author the flow's behavior-level verification and regression coverage as
+   part of the work item** — see Verification duties (R21–R22).
+7. **Hand off to the structure pass** at the end of the work item; the commit
+   checks (full suite + registry/log) are shared with the structure pass (R23).
+
+Extensions to step 2:
+
+- **2.a.** IF a _contract_ is too thin to judge fit; THEN flag it for repair or
+  deliberately inspect the body — and record which you did. Never judge
+  suitability from an interface's name. (R7)
+- **2.b.** IF the isolated-context walk is in use and the isolated-context skill
+  is unavailable; THEN pause for the operator — R6 cannot be satisfied without
+  the isolated walk, and unattended fallback is absent by design. (Dormant
+  while the walk runs in the writing context.)
+
+Extensions to step 3:
+
+- **3.a.** IF no existing lax interface fits the need; THEN call the _output
+  interfaces_ directly; do not reuse on name or code resemblance. (R8)
 
 ## Capability wishes
 
