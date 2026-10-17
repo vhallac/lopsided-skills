@@ -68,7 +68,26 @@ Extensions to step 3:
 
 ## Capability wishes
 
-<!-- unit-003: extensions 5.a–5.d + wish-declined record (R10, R14, R16, S6) — to be authored -->
+When an interface lacks a needed capability, handle the wish in this order.
+Stop at the first branch that resolves the wish; never skip ahead. (R10)
+
+- **5.a.** IF the wish is evidence that the flow and that interface should be
+  merged; THEN record it as a merge candidate for the structure pass. The wish
+  alone never satisfies the merge test (R16) — only observed co-change does —
+  and any merge happens only through the structure pass.
+- **5.b.** IF the interface is lax; THEN route the change through the
+  interface-change check (R14) in the structure pass: change it in place when
+  all call sites want the same change; create a new interface and record a
+  `divergence` entry when they do not.
+- **5.c.** IF the interface is rigid; THEN never change its contract. A wrapper
+  or caller-side workaround is acceptable only if it achieves the need through
+  the rigid interface's existing contract with the required semantics.
+  Otherwise, pause: the change belongs to the owner's request path. Never
+  present a new wrapper as solving a capability the rigid interface lacks.
+- **5.d.** IF the wish is declined; THEN record it once as a `wish-declined`
+  entry through the append tool (S6), so it is not re-argued at every later
+  write. Declined wishes stay declined until new qualifying evidence appears.
+
 
 ## Verification duties
 
