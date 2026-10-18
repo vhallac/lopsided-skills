@@ -258,5 +258,5 @@ Extensions to step 9:
 - **Metrics never decide.** Coupling and cohesion metrics may validate a
   proposed boundary but never propose one or trigger a decision.
 - **Scope exclusions.** No recursive restructuring, no single-caller merges,
-  and none of the other merge-test exclusions; the write loop (R6–R10) and
-  verification authoring (R21–R22) are owned by the write-loop section above.
+  and none of the other merge-test exclusions; the write loop and
+  verification authoring are owned by the write-loop section above.
