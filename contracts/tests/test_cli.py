@@ -47,14 +47,14 @@ class TestCli(unittest.TestCase):
             (root / "contracts.toml").write_text(
                 '[source]\ntree = ["src"]\n', encoding="utf-8"
             )
-            proc = self.run_cli("log", cwd=root)
+            proc = self.run_cli("resolve", cwd=root)
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("not implemented", (proc.stderr + proc.stdout).lower())
 
     def test_invalid_config_wins_over_missing_handler(self):
         # Config refusal (exit 3) happens regardless of subcommand handler state.
         with tempfile.TemporaryDirectory() as tmp:
-            proc = self.run_cli("log", cwd=Path(tmp))
+            proc = self.run_cli("resolve", cwd=Path(tmp))
         self.assertEqual(proc.returncode, 3)
 
 

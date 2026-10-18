@@ -28,6 +28,7 @@ _LAZY_COMMANDS = {
     "generate": (".generate", "main_generate"),
     "check": (".check", "main_check"),
     "affected": (".affected", "main_affected"),
+    "log": (".logs", "main_log"),
 }
 
 
@@ -56,7 +57,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_affected.add_argument("--diff", required=True,
                             help="git ref to diff against, or a file of changed paths")
     p_affected.set_defaults(func_name="main_affected")
-    sub.add_parser("log", help="append to or check decision/knowledge logs")
+    p_log = sub.add_parser("log", help="append to or check decision/knowledge logs")
+    log_sub = p_log.add_subparsers(dest="log_command", required=True)
+    p_append = log_sub.add_parser("append", help="append a validated entry to a log")
+    p_append.add_argument("--log", dest="which_log", required=True,
+                          choices=["decision", "knowledge"])
+    p_append.add_argument("--date", required=True)
+    p_append.add_argument("--work-item", dest="work_item", required=True)
+    p_append.add_argument("--kind")
+    p_append.add_argument("--affected")
+    p_append.add_argument("--decision")
+    p_append.add_argument("--reason")
+    p_append.add_argument("--interfaces")
+    p_append.add_argument("--outcome")
+    p_append.add_argument("--rationale")
+    p_append.set_defaults(func_name="main_log")
+    log_sub.add_parser("check", help="verify logs only grew since the last commit").set_defaults(
+        func_name="main_log")
     sub.add_parser("resolve", help="apply resolutions to the registry Unresolved section")
     return parser
 
@@ -88,4 +105,6 @@ def main(argv: list[str]) -> int:
         handler = getattr(importlib.import_module(mod_name, __package__), fn_name)
     if handler is None:
         parser.error(f"command not implemented yet: {args.command}")
+    if args.command == "log":
+        args.root = find_repo_root()
     return handler(args)
