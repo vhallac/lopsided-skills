@@ -171,7 +171,7 @@ Commands:
 
 | Command | Semantics |
 |---|---|
-| `init <root> --name <t> --goal\|--goal-file <g> --bounds\|--bounds-file <b>` | Create `.todo/`, the plan skeleton (guard frontmatter / Goal memory / Bounds / empty Work units), the guard file, `findings.md`, `progress.md`, and the ticket. Refuses if a plan already exists. |
+| `init <root> --name <t> --goal\|--goal-file <g> --bounds\|--bounds-file <b>` | Create `.todo/`, the plan skeleton (guard frontmatter / Goal memory / Bounds / empty Work units), the guard file, `findings.md`, `progress.md`, and the ticket. Refuses if a plan already exists. Any `--*-file` flag accepts `-` to read its text from stdin; the inline form treats `-` as literal text. |
 | `add-unit <root> --label --input --scope --output --verify [--after <id\|frontier>]` | Add a contract unit. New ID (`unit-NNN`, never reused/renumbered), placed at the tail by default, or after `<id>`, or after `frontier` (first open unit). |
 | `complete <root> <unit> --evidence "<verbatim output>"` | Mark done **and** record the evidence. Refuses without evidence and refuses terminal units. |
 | `block <root> <unit> --kind <code\|test\|mechanical\|requirement> --reason <why>` | Mark blocked with a failure classification. |
@@ -278,6 +278,10 @@ After consent, build the plan through the script — never by hand:
 ```sh
 python3 <skill-directory>/scripts/plan.py init <project-root> \
   --name "<task>" --goal-file <goal.md> --bounds-file <bounds.md>
+
+Any `--*-file` flag (goal, bounds, and the add-unit text pairs) accepts `-` to
+read its text from stdin (e.g. piped text); the inline form treats `-` as
+literal text.
 
 python3 <skill-directory>/scripts/plan.py add-unit <project-root> \
   --label "<label>" --input "<input>" --scope "<scope>" \

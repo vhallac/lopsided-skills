@@ -122,6 +122,7 @@ When a better idea replaces an existing one, supersede it — never delete or re
      --id "<old-card-id>" --title "<claim-title>" --body-file "<body-file>" \
      --rationale "<why the replacement>"
    ```
+   `--body-file -` reads the body from stdin (e.g. piped text); inline `--body -` treats `-` as literal text.
 4. Do not rewrite inbound links of the old card — resolution-time redirect (see Card status) makes them point readers to the successor.
 
 ## Operation: Write a card
@@ -140,6 +141,7 @@ The index is in-context for every write. Do not grep for ideas; grep only for lo
    python3 <skill-directory>/scripts/store.py add-card <project-root> \
      --id "<chosen-id>" --title "<claim-title>" --body-file "<body-file>"
    ```
+   `--body-file -` reads the body from stdin (e.g. piped text); inline `--body -` treats `-` as literal text.
 8. Run link search (below) before finishing.
 9. Do not directly edit `.notes/zettel.md` or `.notes/zettel-index.md`.
 
