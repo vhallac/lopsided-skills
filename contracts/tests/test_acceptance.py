@@ -1,0 +1,210 @@
+"""Acceptance fixture run (unit-007): issue #8 acceptance demonstrated
+end-to-end on a fixture repo.
+
+Covers, against one fixture:
+- generate is idempotent and byte-deterministic (S1)
+- check is green when the registry matches source, exits non-zero on drift
+  naming the offending call sites (S2)
+- affected lists the interfaces hit by a diff with their call sites, and
+  flags removed sites / possibly-dead interfaces (S5)
+- log append validates and rejects malformed entries naming the field (S6)
+- log check passes when logs only grew, fails non-zero when earlier content
+  changed (S7)
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+CONFIG = """\
+[source]
+tree = ["src"]
+
+[inputs]
+patterns = ["pkg.api:api_*"]
+
+[rigid]
+patterns = ["pkg.api:api_*", "ext:*"]
+"""
+
+API_SRC = """\
+def api_create(x):
+    return x
+"""
+
+CALLER_SRC = """\
+from pkg.api import api_create
+
+def run():
+    return api_create(1)
+"""
+
+
+def _write(root: Path, rel: str, text: str) -> None:
+    p = root / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(text, encoding="utf-8")
+
+
+class TestAcceptance(unittest.TestCase):
+    """End-to-end acceptance on a fixture repo, via the CLI only."""
+
+    def run_cli(self, root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, "-m", "contracts", *args],
+            cwd=root,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
+        )
+
+    def git(self, root: Path, *argv: str) -> None:
+        env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+                   GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+        subprocess.run(["git", *argv], cwd=root, check=True, env=env,
+                       capture_output=True)
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        (self.root / "contracts.toml").write_text(CONFIG, encoding="utf-8")
+        _write(self.root, "src/pkg/__init__.py", "")
+        _write(self.root, "src/pkg/api.py", API_SRC)
+        _write(self.root, "src/app.py", CALLER_SRC)
+
+    # --- S1: generate, idempotence, byte determinism -----------------------
+
+    def test_generate_is_idempotent_and_byte_deterministic(self):
+        first = self.run_cli(self.root, "generate")
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertIn("registry written", first.stdout)
+        reg = self.root / "registry.md"
+        self.assertTrue(reg.is_file())
+        bytes1 = reg.read_bytes()
+        second = self.run_cli(self.root, "generate")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(bytes1, reg.read_bytes(),
+                         "second generate must not change a single byte")
+        # The registry records the call site under the api interface.
+        text = reg.read_text(encoding="utf-8")
+        self.assertIn("### pkg.api:api_create", text)
+        self.assertIn("- src/app.py:run", text)
+
+    # --- S2: check green / drift -------------------------------------------
+
+    def test_check_green_then_drift_names_sites(self):
+        self.assertEqual(self.run_cli(self.root, "generate").returncode, 0)
+        green = self.run_cli(self.root, "check")
+        self.assertEqual(green.returncode, 0, green.stdout + green.stderr)
+        self.assertIn("up to date", green.stdout)
+
+        # Drift: a new call site appears in source.
+        _write(self.root, "src/other.py",
+               "from pkg.api import api_create\n\n\ndef go():\n"
+               "    return api_create(2)\n")
+        drift = self.run_cli(self.root, "check")
+        self.assertEqual(drift.returncode, 1, drift.stdout)
+        self.assertIn("out of date", drift.stdout)
+        self.assertIn("added call site", drift.stdout)
+        self.assertIn("src/other.py:go", drift.stdout)
+        self.assertIn("run `contracts generate` to update", drift.stdout)
+
+    # --- S5: affected query --------------------------------------------------
+
+    def test_affected_lists_sites_and_flags_removals(self):
+        self.assertEqual(self.run_cli(self.root, "generate").returncode, 0)
+
+        def affected(paths: list[str]) -> str:
+            changed = self.root / "changed.txt"
+            changed.write_text("\n".join(paths) + "\n", encoding="utf-8")
+            proc = self.run_cli(self.root, "affected", "--diff", "changed.txt")
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            return proc.stdout
+
+        # Unrelated change: nothing affected.
+        self.assertIn("no affected interfaces",
+                      affected(["src/unrelated.py"]))
+
+        # Change touching a call site: interface listed with the site.
+        out = affected(["src/app.py"])
+        self.assertIn("pkg.api:api_create", out)
+        self.assertIn("- src/app.py:run [present]", out)
+
+        # Call site removed from source while registry still has it:
+        # flagged as removed, interface possibly dead.
+        _write(self.root, "src/app.py", "def run():\n    return 1\n")
+        out = affected(["src/app.py"])
+        self.assertIn("- src/app.py:run [removed]", out)
+        self.assertIn("POSSIBLY DEAD", out)
+
+    # --- S6/S7: log append + append-only check -------------------------------
+
+    def _commit_all(self) -> None:
+        if not (self.root / ".git").is_dir():
+            self.git(self.root, "init", "-q")
+        self.git(self.root, "add", "-A")
+        self.git(self.root, "commit", "-q", "-m", "c")
+
+    def test_log_reject_malformed_append_and_append_only_check(self):
+        self._commit_all()
+
+        # Malformed entry rejected, failing field named (S6).
+        bad = self.run_cli(self.root, "log", "append", "--log", "decision",
+                           "--date", "18-10-2026", "--work-item", "#8",
+                           "--kind", "merge", "--affected", "pkg.api:api_create",
+                           "--decision", "d", "--reason", "r")
+        self.assertEqual(bad.returncode, 1, bad.stdout)
+        self.assertIn("rejected", bad.stderr)
+        self.assertIn("date", bad.stderr)
+        self.assertFalse((self.root / "decision-log.md").is_file(),
+                         "rejected entry must not be written")
+
+        unknown_kind = self.run_cli(self.root, "log", "append", "--log", "decision",
+                                    "--date", "2026-10-18", "--work-item", "#8",
+                                    "--kind", "rewrite", "--affected", "x",
+                                    "--decision", "d", "--reason", "r")
+        self.assertEqual(unknown_kind.returncode, 1)
+        self.assertIn("kind", unknown_kind.stderr)
+
+        # Valid appends to both logs (S6).
+        ok = self.run_cli(self.root, "log", "append", "--log", "decision",
+                          "--date", "2026-10-18", "--work-item", "#8",
+                          "--kind", "merge", "--affected", "pkg.api:api_create",
+                          "--decision", "merge a.B into c.d", "--reason", "fits")
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        self.assertIn("appended to", ok.stdout)
+        self.assertIn("decision-log.md", ok.stdout)
+        ok = self.run_cli(self.root, "log", "append", "--log", "knowledge",
+                          "--date", "2026-10-18", "--work-item", "#8",
+                          "--interfaces", "pkg.api:api_create",
+                          "--outcome", "o", "--rationale", "r")
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+
+        # Logs only grew since the commit → check passes (S7).
+        growing = self.run_cli(self.root, "log", "check")
+        self.assertEqual(growing.returncode, 0, growing.stdout + growing.stderr)
+        self.assertIn("append-only check passed", growing.stdout)
+
+        # Modify earlier content → check fails non-zero (S7).
+        self._commit_all()
+        log = self.root / "decision-log.md"
+        text = log.read_text(encoding="utf-8")
+        log.write_text(text.replace("merge a.B into c.d", "TAMPERED"),
+                       encoding="utf-8")
+        tampered = self.run_cli(self.root, "log", "check")
+        self.assertEqual(tampered.returncode, 1, tampered.stdout)
+        self.assertIn("earlier content modified", tampered.stdout + tampered.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()
