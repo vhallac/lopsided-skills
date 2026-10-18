@@ -20,9 +20,13 @@ EXIT_FAIL = 1
 EXIT_USAGE = 2
 EXIT_CONFIG = 3
 
-# Subcommands registered by later units; each maps to main_* with signature
+# Subcommand handlers; each maps to main_* with signature
 # (args: argparse.Namespace) -> int.
-_COMMANDS: dict[str, callable] = {}
+# Lazy-registered handlers (imported in main() to avoid import cycles:
+# subcommand modules import find_repo_root from here).
+_LAZY_COMMANDS = {
+    "generate": (".generate", "main_generate"),
+}
 
 
 def find_repo_root(start: Path | None = None) -> Path:
@@ -71,7 +75,12 @@ def main(argv: list[str]) -> int:
     if cfg is None:
         return EXIT_CONFIG
     args.config = cfg
-    handler = _COMMANDS.get(args.command)
+    handler = _LAZY_COMMANDS.get(args.command)
+    if handler is not None:
+        import importlib
+
+        mod_name, fn_name = handler
+        handler = getattr(importlib.import_module(mod_name, __package__), fn_name)
     if handler is None:
         parser.error(f"command not implemented yet: {args.command}")
     return handler(args)

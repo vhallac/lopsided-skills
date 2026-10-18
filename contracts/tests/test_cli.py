@@ -39,15 +39,15 @@ class TestCli(unittest.TestCase):
         self.assertEqual(proc.returncode, 3, proc.stderr)
         self.assertIn("[source] tree is required", proc.stderr)
 
-    def test_implemented_commands_absent_skeleton(self):
-        # Skeleton: commands are registered but no handlers yet; the CLI must
-        # fail with a meaningful message (not a traceback) for now.
+    def test_unimplemented_commands_refuse_meaningfully(self):
+        # Commands whose units are not yet implemented must fail with a
+        # meaningful message (not a traceback).
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             (root / "contracts.toml").write_text(
                 '[source]\ntree = ["src"]\n', encoding="utf-8"
             )
-            proc = self.run_cli("generate", cwd=root)
+            proc = self.run_cli("check", cwd=root)
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("not implemented", (proc.stderr + proc.stdout).lower())
 
