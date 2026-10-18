@@ -55,13 +55,18 @@ def _validate_against_source(entries: list[Resolution], existing_keys: set,
 def main_resolve(args) -> int:
     root = find_repo_root()
     input_path = Path(args.input)
-    if not input_path.is_file():
+    if args.input == "-":
+        input_text = sys.stdin.read()
+        input_name = "-"
+    elif not input_path.is_file():
         print(f"contracts resolve: resolutions input not found: {input_path}",
               file=sys.stderr)
         return EXIT_FAIL
+    else:
+        input_text = input_path.read_text(encoding="utf-8")
+        input_name = str(input_path)
     try:
-        entries = parse_resolutions_text(input_path.read_text(encoding="utf-8"),
-                                         str(input_path))
+        entries = parse_resolutions_text(input_text, input_name)
     except ResolutionError as exc:
         print(f"contracts resolve: {exc}", file=sys.stderr)
         return EXIT_FAIL

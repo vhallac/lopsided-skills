@@ -140,6 +140,19 @@ class TestResolve(unittest.TestCase):
         self.assertEqual(len(store), 1)
         self.assertEqual(store[0].target, "obj.handle")
 
+    def test_stdin_dash_input(self):
+        """'-' reads the resolutions input from stdin (design decision 008)."""
+        self._generate()
+        result = subprocess.run(
+            ["python3", "-m", "contracts", "resolve", "--input", "-",
+             "--date", "2026-10-18", "--work-item", "#8", "--reason", "r"],
+            cwd=self.root, env=dict(os.environ, PYTHONPATH=str(REPO_ROOT)),
+            input=GOOD_INPUT, capture_output=True, text=True)
+        self.assertEqual(result.returncode, EXIT_OK, result.stderr)
+        store = load_resolutions(self.root)
+        self.assertEqual(len(store), 1)
+        self.assertEqual(store[0].target, "obj.handle")
+
     def test_resolution_survives_regeneration_and_check_stays_green(self):
         self._generate()
         _run(["resolve", "--input", str(self.input), "--date", "2026-10-18",

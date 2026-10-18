@@ -2,10 +2,12 @@
 detection naming added/removed call sites, affected-interface query from a
 diff, and the liveness flag when call sites are removed."""
 
+import io
 import os
 import subprocess
 import sys
 import unittest
+import unittest.mock
 from pathlib import Path
 
 PACKAGE_ROOT = str(Path(__file__).resolve().parents[2])
@@ -69,6 +71,19 @@ class _Base(unittest.TestCase):
 
     def cfg(self):
         return config_mod.load_config(self.root)
+
+
+class StdinDiffTest(_Base):
+    def test_changed_files_stdin_dash(self):
+        """'--diff -' reads the changed-file list from stdin (decision 008)."""
+        listing = "src/app.py\n\nsrc/pkg/api.py\n"
+        (self.root / "changed.txt").write_text(listing, encoding="utf-8")
+        expected = changed_files(self.root, str(self.root / "changed.txt"))
+        with io.StringIO(listing) as fake_stdin, \
+                unittest.mock.patch("sys.stdin", fake_stdin):
+            got = changed_files(self.root, "-")
+        self.assertEqual(got, expected)
+        self.assertEqual(got, ["src/app.py", "src/pkg/api.py"])
 
 
 class CheckTest(_Base):

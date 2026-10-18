@@ -9,7 +9,9 @@ call sites no longer exist in the source is "possibly dead".
 from __future__ import annotations
 
 import subprocess
+import sys
 from dataclasses import dataclass, field
+from typing import TextIO
 from pathlib import Path
 
 from . import generate as generate_mod
@@ -36,12 +38,15 @@ def _changed_from_ref(root: Path, ref: str) -> list[str]:
     return [l for l in out.stdout.splitlines() if l]
 
 
-def _changed_from_file(path: Path) -> list[str]:
-    return [l.strip() for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
+def _changed_from_file(path: Path | TextIO) -> list[str]:
+    text = path.read_text(encoding="utf-8") if isinstance(path, Path) else path.read()
+    return [l.strip() for l in text.splitlines() if l.strip()]
 
 
 def changed_files(root: Path, diff: str) -> list[str]:
-    """Resolve --diff value: a git ref, or a path to a newline-separated list."""
+    """Resolve --diff value: '-', a git ref, or a path to a newline-separated list."""
+    if diff == "-":
+        return _changed_from_file(sys.stdin)  # type: ignore[arg-type]
     candidate = root / diff
     if candidate.is_file():
         return _changed_from_file(candidate)
