@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import config as config_mod
-from .cli import EXIT_FAIL, find_repo_root
+from .cli import EXIT_FAIL, EXIT_OK, find_repo_root
 from .resolutions import ResolutionError, load_resolutions
 
 REGISTRY_NAME = "registry.md"
@@ -281,4 +281,4 @@ def main_generate(args) -> int:
         f"registry written: {REGISTRY_NAME} "
         f"({len(interfaces)} interfaces, {len(unresolved)} unresolved targets)"
     )
-    return 0
+    return EXIT_OK
