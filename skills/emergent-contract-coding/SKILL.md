@@ -1,12 +1,13 @@
 ---
 name: emergent-contract-coding
-description: NOT for auto-selection. The write-loop section of the emergent contract coding methodology. Activates only via an explicit opt-in statement in the repository's AGENTS.md (or equivalent) — see the activation guard below. Conversation mentions, issue text, or code references do not activate this skill.
+description: NOT for auto-selection. The write-loop and structure-pass sections of the emergent contract coding methodology. Activates only via an explicit opt-in statement in the repository's AGENTS.md (or equivalent) — see the activation guard below. Conversation mentions, issue text, or code references do not activate this skill.
 ---
 
-# Emergent Contract Coding — Write Loop
+# Emergent Contract Coding
 
 The write loop is the set of steps an agent executes for one work item — one
-specification implemented or changed, ending in one commit.
+specification implemented or changed, ending in one commit. The structure
+pass is the set of steps that ends every work item after the flow is written.
 
 ## Activation guard
 
@@ -115,3 +116,147 @@ Verification is part of the work item, not a follow-up task.
   the contract walk in the writing context; the only trace of the isolated
   variant is the dormant extension 2.b. No runtime dependency on the
   isolated-context skill exists in this section.
+
+---
+
+# Emergent Contract Coding — Structure Pass
+
+The structure pass is the pass that ends every work item after the flow is
+written. It gives every relevant call site an explicit outcome, runs the
+interface-change and merge tests, makes exactly one structure decision per
+candidate, and shapes and prunes the resulting interfaces. The write loop
+hands off here.
+
+The activation guard above applies to this section too: without the
+`AGENTS.md` opt-in statement, none of the steps below apply.
+
+## Main scenario
+
+Execute these steps for the work item's change, after the write loop's step 7
+hand-off.
+
+1. **Regenerate and check the registry.** Run `contracts generate` and
+   `contracts check`. The registry is never hand-edited.
+2. **List the blast radius.** Run `contracts affected --diff HEAD` — every
+   affected interface, all its call sites, and interfaces whose call sites
+   were removed (flagged for step 8).
+3. **Give every relevant call site an explicit outcome:** updated, left
+   unchanged with a recorded reason, or paused with an `unresolved` entry.
+   Uncertainty is never resolved by silence. Propagate caller updates until
+   stable, within ownership: rigid interfaces and systems owned by others are
+   outside the boundary; input interfaces owned by this project stay inside.
+   Pause if a propagated change would alter externally visible behavior. Do
+   not re-examine any interface created, changed, or merged during this same
+   pass.
+4. **Run the interface-change check** for each existing interface the change
+   must alter — a disagreement test, not a likeness test:
+   - **Rigid** → never changed; route through the write loop's
+     rigid-interface wish handling (its step 5.c).
+   - **Lax, all call sites want the same change** → change it in place and
+     update every caller in this work item.
+   - **Lax, call sites want different things** → create a new interface for
+     the new need, leave the old one serving its callers, record a
+     `divergence` entry.
+5. **Run the merge test on observed co-change.** Merge only when all three
+   hold: (a) the same change was needed in two or more places in this work
+   item; (b) the changed region is the same rule and could be written once;
+   (c) the diff matches none of the excluded causes below. One qualifying
+   event is enough; similar inputs, overlapping code, or a shared output
+   interface are never sufficient on their own. Check exclusions by comparing
+   the diff against the list, not by inferring intent. Never merge
+   automatically.
+
+   Excluded causes — co-change from these is not merge evidence:
+
+   - **Rigid-interface ripple:** callers changed because a rigid interface
+     changed (for example a library upgrade).
+   - **Shared-interface or shared-state ripple:** callers changed because a
+     shared interface or shared state they all use changed. This includes
+     caller updates made by this structure pass itself (steps 3 and 4), and
+     changes to a state schema.
+   - **Batch edit:** one request, refactor or codemod edited both places with
+     no shared logic in the changed region. Exception: it qualifies when the
+     changed region is literally the same transformation.
+   - **Asymmetric adaptation:** one requirement touched both places, but each
+     needed its own adaptation. The symmetric case — one rule applied
+     identically — may merge.
+   - **Drive-by edits:** convenience changes made "while here".
+6. **Make exactly one structure decision per considered candidate — merge,
+   divorce, or leave — and record it with its reason via `contracts log
+   append`.** Record `leave` only when a candidate was actually considered
+   and preserved, not for every pair that fails the merge test. Metrics may
+   inform review but never trigger a decision. New qualifying evidence about
+   a previously considered pair may reopen it in this pass — prior `leave`
+   entries do not forbid that.
+7. **Shape the outcome.** A merged interface reaches only as far as the
+   regions that actually co-changed, and its contract is stated without
+   referring to its callers. "No interface; keep it inline" is a valid
+   outcome. A boundary chosen only because it coincides with a change site is
+   forbidden. When serving divergent call sites would require a flag or mode
+   parameter — or recorded `divergence` entries show its callers no longer
+   want the same thing — split or dissolve the interface instead. Never add
+   the flag.
+8. **Run the liveness check** for each interface flagged in step 2 whose call
+   sites were removed: using the registry, check each contract clause for a
+   remaining live reader and remove the clauses none uses. The check runs at
+   this change, never as a sweep, and it runs whether or not a merge
+   happened.
+9. **Commit.** The trial repo's gate runs `contracts check` and `contracts
+   log check`, and the full test suite runs green; all exit 0 and the work
+   item ends. These checks are shared with the write loop's step 7 — this
+   pass runs them; it does not own them alone.
+
+Extensions to step 2:
+
+- **2.a.** IF the `affected` output marks unresolved calls that affect the
+  change; THEN pause for the operator.
+
+Extensions to step 3:
+
+- **3.a.** IF a call site's relevance, impact, or update cannot be
+  determined; THEN pause and record `unresolved` — never silence.
+- **3.b.** IF a propagated change would alter externally visible behavior;
+  THEN pause for the operator.
+
+Extensions to step 5:
+
+- **5.a.** IF a co-change matches an excluded cause (rigid-interface ripple,
+  shared-interface/state ripple, batch edit without identical transformation,
+  asymmetric adaptation, drive-by edit); THEN it is not merge evidence; the
+  merge test fails. Record `leave` only if the pair was genuinely considered
+  as a candidate.
+- **5.b.** IF the co-change's cause matches no exclusion but cannot be
+  determined; THEN pause and record `unresolved`.
+
+Extensions to step 6:
+
+- **6.a.** IF new qualifying evidence about a previously considered pair
+  exists; THEN the pair may be considered again in this pass — prior `leave`
+  entries do not forbid it.
+
+Extensions to step 9:
+
+- **9.a.** IF the registry or log check fails at commit; THEN the commit is
+  blocked; resolve within the work item.
+
+## Constraints and boundaries
+
+- **Activation stays guarded.** This section never becomes active by
+  conversation, issue text, or code reference — only the `AGENTS.md` opt-in
+  statement activates the skill (see the Activation guard above).
+- **Substrate scripts are referenced by name only.** This section names
+  `contracts generate` / `check` / `affected` / `log append` / `log check`
+  and the registry's never-edit rule; it does not embed or depend on their
+  implementation. Authoring is independent of the substrate scripts.
+- **Entry kinds are not invented here.** The entries used (`merge`,
+  `divorce`, `leave`, `divergence`, `unresolved`) are defined by the
+  requirements and validated by the append tool; this section introduces no
+  new kinds.
+- **No recursion, no sweeps.** The pass does not re-examine interfaces it
+  created or merged in the same pass (step 3), and the liveness check runs
+  only at a change that removed callers, never as a sweep (step 8).
+- **Metrics never decide.** Coupling and cohesion metrics may validate a
+  proposed boundary but never propose one or trigger a decision.
+- **Scope exclusions.** No recursive restructuring, no single-caller merges,
+  and none of the other merge-test exclusions; the write loop (R6–R10) and
+  verification authoring (R21–R22) are owned by the write-loop section above.
