@@ -279,7 +279,7 @@ After consent, build the plan through the script — never by hand:
 python3 <skill-directory>/scripts/plan.py init <project-root> \
   --name "<task>" --goal-file <goal.md> --bounds-file <bounds.md>
 
-Any `--*-file` flag (goal, bounds, and the add-unit text pairs) accepts `-` to
+Any `--*-file` flag (goal and bounds) accepts `-` to
 read its text from stdin (e.g. piped text); the inline form treats `-` as
 literal text.
 
