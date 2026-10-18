@@ -55,8 +55,8 @@ Extensions to step 2:
   deliberately inspect the body — and record which you did. Never judge
   suitability from an interface's name.
 - **2.b.** IF the isolated-context walk is in use and the isolated-context skill
-  is unavailable; THEN pause for the operator — R6 cannot be satisfied without
-  the isolated walk, and unattended fallback is absent by design. (Dormant
+  is unavailable; THEN pause for the operator — the walk cannot be satisfied
+  without the isolated skill, and unattended fallback is absent by design. (Dormant
   while the walk runs in the writing context.)
 
 Extensions to step 3:
