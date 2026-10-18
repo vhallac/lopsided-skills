@@ -1,0 +1,77 @@
+"""Shared CLI plumbing: subcommand dispatch, exit codes, error conventions.
+
+Exit codes (S8):
+    0 — success
+    1 — command-specific failure (drift, malformed entry, ...)
+    2 — usage error
+    3 — config missing/invalid (refuses to run)
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+from . import config as config_mod
+
+EXIT_OK = 0
+EXIT_FAIL = 1
+EXIT_USAGE = 2
+EXIT_CONFIG = 3
+
+# Subcommands registered by later units; each maps to main_* with signature
+# (args: argparse.Namespace) -> int.
+_COMMANDS: dict[str, callable] = {}
+
+
+def find_repo_root(start: Path | None = None) -> Path:
+    """Walk up from `start` (default cwd) to the dir containing contracts.toml."""
+    cur = (start or Path.cwd()).resolve()
+    while True:
+        if (cur / config_mod.CONFIG_NAME).is_file():
+            return cur
+        if cur.parent == cur:
+            raise config_mod.ConfigError(
+                f"no {config_mod.CONFIG_NAME} found between here and filesystem root"
+            )
+        cur = cur.parent
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="contracts",
+        description="Contract substrate tooling: registry, logs, affected queries.",
+    )
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("generate", help="generate registry.md from source")
+    sub.add_parser("check", help="compare registry.md with source")
+    sub.add_parser("affected", help="list interfaces affected by a diff")
+    sub.add_parser("log", help="append to or check decision/knowledge logs")
+    sub.add_parser("resolve", help="apply resolutions to the registry Unresolved section")
+    return parser
+
+
+def load_config_or_fail(cwd: Path | None = None):
+    """Load contracts.toml (searching upward); on failure print and return None."""
+    try:
+        root = find_repo_root(cwd)
+        return config_mod.load_config(root)
+    except config_mod.ConfigError as exc:
+        print(f"contracts: refusing to run — {exc}", file=sys.stderr)
+        return None
+
+
+def main(argv: list[str]) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    # Every command requires valid config; refuse before anything else (issue
+    # #8 extension *.a: missing/invalid contracts.toml refuses to run).
+    cfg = load_config_or_fail()
+    if cfg is None:
+        return EXIT_CONFIG
+    args.config = cfg
+    handler = _COMMANDS.get(args.command)
+    if handler is None:
+        parser.error(f"command not implemented yet: {args.command}")
+    return handler(args)
