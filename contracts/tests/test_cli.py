@@ -39,22 +39,15 @@ class TestCli(unittest.TestCase):
         self.assertEqual(proc.returncode, 3, proc.stderr)
         self.assertIn("[source] tree is required", proc.stderr)
 
-    def test_unimplemented_commands_refuse_meaningfully(self):
-        # Commands whose units are not yet implemented must fail with a
-        # meaningful message (not a traceback).
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            (root / "contracts.toml").write_text(
-                '[source]\ntree = ["src"]\n', encoding="utf-8"
-            )
-            proc = self.run_cli("resolve", cwd=root)
-        self.assertNotEqual(proc.returncode, 0)
-        self.assertIn("not implemented", (proc.stderr + proc.stdout).lower())
-
     def test_invalid_config_wins_over_missing_handler(self):
-        # Config refusal (exit 3) happens regardless of subcommand handler state.
+        # Config refusal (exit 3) happens before any subcommand behavior;
+        # every command is implemented now, so resolve's own required flags
+        # must not mask the config refusal.
         with tempfile.TemporaryDirectory() as tmp:
-            proc = self.run_cli("resolve", cwd=Path(tmp))
+            proc = self.run_cli(
+                "resolve", "--input", "in.toml", "--date", "2026-10-18",
+                "--work-item", "#8", "--reason", "r", cwd=Path(tmp),
+            )
         self.assertEqual(proc.returncode, 3)
 
 

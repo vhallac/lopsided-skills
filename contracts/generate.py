@@ -28,11 +28,13 @@ from __future__ import annotations
 
 import ast
 import fnmatch
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import config as config_mod
-from .cli import find_repo_root
+from .cli import EXIT_FAIL, find_repo_root
+from .resolutions import ResolutionError, load_resolutions
 
 REGISTRY_NAME = "registry.md"
 
@@ -168,6 +170,41 @@ def _collect(repo_root: Path, cfg: config_mod.Config):
     return interfaces, unresolved
 
 
+def apply_resolutions(interfaces: dict[str, Interface],
+                      unresolved: dict[str, UnresolvedTarget],
+                      resolutions) -> None:
+    """Apply persisted resolutions in place (S4): move each resolved call
+    site from the Unresolved section into its interface, or drop it when
+    external. Resolutions naming an unknown target, call site or interface
+    fail loudly — a stale resolution is drift, never silently ignored."""
+    for r in resolutions:
+        sites = unresolved.get(r.target)
+        if sites is None:
+            raise ResolutionError(
+                f"stale resolution: unknown unresolved target [{r.target}]"
+            )
+        if r.call_site is not None and r.call_site not in sites.call_sites:
+            raise ResolutionError(
+                f"stale resolution: [{r.target}] has no call site "
+                f"{r.call_site.file}:{r.call_site.symbol}"
+            )
+        if not r.external and r.interface not in interfaces:
+            raise ResolutionError(
+                f"stale resolution: [{r.target}] names unknown interface "
+                f"{r.interface}"
+            )
+        if r.call_site is None:
+            resolved = set(sites.call_sites)
+            sites.call_sites.clear()
+        else:
+            resolved = {r.call_site}
+            sites.call_sites.discard(r.call_site)
+        if not r.external:
+            interfaces[r.interface].call_sites |= resolved
+        if not sites.call_sites:
+            del unresolved[r.target]
+
+
 def _in_tree_module_prefixes(modules: dict[str, ast.AST]) -> set[str]:
     """All module names and their dotted ancestor prefixes (packages)."""
     prefixes: set[str] = set()
@@ -226,14 +263,20 @@ def render_registry(interfaces: dict[str, Interface],
 
 def generate(repo_root: Path, cfg: config_mod.Config) -> str:
     interfaces, unresolved = _collect(repo_root, cfg)
+    apply_resolutions(interfaces, unresolved, load_resolutions(repo_root))
     return render_registry(interfaces, unresolved)
 
 
 def main_generate(args) -> int:
     root = find_repo_root()
-    text = generate(root, args.config)
+    try:
+        text = generate(root, args.config)
+    except ResolutionError as exc:
+        print(f"contracts generate: {exc}", file=sys.stderr)
+        return EXIT_FAIL
     (root / REGISTRY_NAME).write_text(text, encoding="utf-8")
     interfaces, unresolved = _collect(root, args.config)
+    apply_resolutions(interfaces, unresolved, load_resolutions(root))
     print(
         f"registry written: {REGISTRY_NAME} "
         f"({len(interfaces)} interfaces, {len(unresolved)} unresolved targets)"

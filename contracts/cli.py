@@ -29,6 +29,7 @@ _LAZY_COMMANDS = {
     "check": (".check", "main_check"),
     "affected": (".affected", "main_affected"),
     "log": (".logs", "main_log"),
+    "resolve": (".resolve", "main_resolve"),
 }
 
 
@@ -74,7 +75,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_append.set_defaults(func_name="main_log")
     log_sub.add_parser("check", help="verify logs only grew since the last commit").set_defaults(
         func_name="main_log")
-    sub.add_parser("resolve", help="apply resolutions to the registry Unresolved section")
+    p_resolve = sub.add_parser("resolve",
+                               help="apply resolutions to the registry Unresolved section")
+    p_resolve.add_argument("--input", required=True,
+                           help="resolutions input file ([[resolution]] TOML entries)")
+    p_resolve.add_argument("--date", required=True,
+                           help="decision-log entry date (YYYY-MM-DD)")
+    p_resolve.add_argument("--work-item", dest="work_item", required=True,
+                           help="decision-log work-item reference")
+    p_resolve.add_argument("--reason", required=True,
+                           help="decision-log reason (non-empty)")
+    p_resolve.set_defaults(func_name="main_resolve")
     return parser
 
 
