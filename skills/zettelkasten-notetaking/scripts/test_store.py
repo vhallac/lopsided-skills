@@ -56,10 +56,11 @@ Second body.
 """, encoding="utf-8")
         return root
 
-    def run_store(self, root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    def run_store(self, root: Path, *args: str, input: str | None = None) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
             [sys.executable, str(SCRIPT), *args, str(root)],
             text=True,
+            input=input,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,
@@ -539,6 +540,63 @@ Body.
 
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("expected `# <numeric.dotted.id>`", result.stderr)
+
+
+class TestStdinAlias(unittest.TestCase):
+    def setUp(self) -> None:
+        self.helper = TestStoreCommands("test_add_card_places_child_after_parent_subtree_and_commits")
+        self.root = self.helper.make_store()
+        self.assertEqual(self.helper.run_store(self.root, "init").returncode, 0)
+
+    def test_add_card_reads_body_from_stdin(self) -> None:
+        result = self.helper.run_store(
+            self.root, "add-card", "--id", "3", "--title", "Stdin claim", "--body-file", "-",
+            input="Stdin body.\n",
+        )
+        self.assertEqual(result.returncode, 0)
+        cards = (self.root / ".notes/zettel.md").read_text(encoding="utf-8")
+        self.assertIn("Stdin body.", cards)
+
+    def test_supersede_reads_body_from_stdin(self) -> None:
+        result = self.helper.run_store(
+            self.root, "supersede", "--id", "1", "--title", "Superseded claim",
+            "--body-file", "-", "--rationale", "why",
+            input="New body.\n",
+        )
+        self.assertEqual(result.returncode, 0)
+        cards = (self.root / ".notes/zettel.md").read_text(encoding="utf-8")
+        self.assertIn("New body.", cards)
+
+    def test_stdin_form_is_byte_identical_to_file_form(self) -> None:
+        file_root = self.helper.make_store()
+        stdin_root = self.helper.make_store()
+        self.assertEqual(self.helper.run_store(file_root, "init").returncode, 0)
+        self.assertEqual(self.helper.run_store(stdin_root, "init").returncode, 0)
+        body = Path(tempfile.mkdtemp()) / "body.md"
+        body.write_text("Identical body.\n", encoding="utf-8")
+        self.assertEqual(
+            self.helper.run_store(
+                file_root, "add-card", "--id", "3", "--title", "T", "--body-file", str(body),
+            ).returncode,
+            0,
+        )
+        self.assertEqual(
+            self.helper.run_store(
+                stdin_root, "add-card", "--id", "3", "--title", "T", "--body-file", "-",
+                input=body.read_text(encoding="utf-8"),
+            ).returncode,
+            0,
+        )
+        self.assertEqual(
+            (file_root / ".notes/zettel.md").read_bytes(),
+            (stdin_root / ".notes/zettel.md").read_bytes(),
+        )
+
+    def test_inline_body_dash_is_literal(self) -> None:
+        result = self.helper.run_store(self.root, "add-card", "--id", "3", "--title", "T", "--body", "-")
+        self.assertEqual(result.returncode, 0)
+        cards = (self.root / ".notes/zettel.md").read_text(encoding="utf-8")
+        self.assertIn("-", cards)
 
 
 if __name__ == "__main__":

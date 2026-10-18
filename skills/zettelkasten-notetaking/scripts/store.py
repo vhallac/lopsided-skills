@@ -718,6 +718,8 @@ def print_validation(root: Path) -> int:
 def body_argument(args: argparse.Namespace) -> str:
     if args.body is not None:
         return args.body
+    if args.body_file == "-":
+        return sys.stdin.read()
     return Path(args.body_file).read_text(encoding="utf-8")
 
 
