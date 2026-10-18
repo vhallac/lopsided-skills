@@ -26,6 +26,8 @@ EXIT_CONFIG = 3
 # subcommand modules import find_repo_root from here).
 _LAZY_COMMANDS = {
     "generate": (".generate", "main_generate"),
+    "check": (".check", "main_check"),
+    "affected": (".affected", "main_affected"),
 }
 
 
@@ -50,7 +52,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("generate", help="generate registry.md from source")
     sub.add_parser("check", help="compare registry.md with source")
-    sub.add_parser("affected", help="list interfaces affected by a diff")
+    p_affected = sub.add_parser("affected", help="list interfaces affected by a diff")
+    p_affected.add_argument("--diff", required=True,
+                            help="git ref to diff against, or a file of changed paths")
+    p_affected.set_defaults(func_name="main_affected")
     sub.add_parser("log", help="append to or check decision/knowledge logs")
     sub.add_parser("resolve", help="apply resolutions to the registry Unresolved section")
     return parser

@@ -47,7 +47,7 @@ class TestCli(unittest.TestCase):
             (root / "contracts.toml").write_text(
                 '[source]\ntree = ["src"]\n', encoding="utf-8"
             )
-            proc = self.run_cli("check", cwd=root)
+            proc = self.run_cli("log", cwd=root)
         self.assertNotEqual(proc.returncode, 0)
         self.assertIn("not implemented", (proc.stderr + proc.stdout).lower())
 
