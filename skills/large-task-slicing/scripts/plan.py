@@ -559,7 +559,10 @@ def text_arg(args: argparse.Namespace, name: str) -> str:
     inline = getattr(args, name)
     if inline is not None:
         return inline
-    return Path(getattr(args, f"{name}_file")).read_text(encoding="utf-8")
+    file_value = getattr(args, f"{name}_file")
+    if file_value == "-":
+        return sys.stdin.read()
+    return Path(file_value).read_text(encoding="utf-8")
 
 
 def add_text_pair(parser: argparse.ArgumentParser, name: str) -> None:

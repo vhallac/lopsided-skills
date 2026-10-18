@@ -346,5 +346,59 @@ class TestPlanCommands(unittest.TestCase):
         self.assertIn("does not match its last event", result.stderr)
 
 
+class TestStdinAlias(unittest.TestCase):
+    """'-' as --<key>-file reads stdin; inline '-' stays literal."""
+
+    def make_root(self) -> Path:
+        return Path(tempfile.mkdtemp())
+
+    def run_plan_input(self, stdin_text: str, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), *args],
+            input=stdin_text,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+
+    def test_init_goal_and_bounds_via_stdin(self) -> None:
+        root = self.make_root()
+        result = self.run_plan_input(
+            GOAL,
+            "init", "--name", "T", "--goal-file", "-", "--bounds", BOUNDS,
+            str(root),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(GOAL, (root / ".todo" / "task_plan.md").read_text(encoding="utf-8"))
+
+    def test_stdin_form_matches_file_form(self) -> None:
+        goal_file = self.make_root() / "goal.md"
+        goal_file.write_text(GOAL, encoding="utf-8")
+        root_a = self.make_root()
+        via_stdin = self.run_plan_input(
+            GOAL, "init", "--name", "T", "--goal-file", "-", "--bounds", BOUNDS, str(root_a)
+        )
+        root_b = self.make_root()
+        via_file = self.run_plan_input(
+            "", "init", "--name", "T", "--goal-file", str(goal_file), "--bounds", BOUNDS, str(root_b)
+        )
+        self.assertEqual(via_stdin.returncode, 0, via_stdin.stderr)
+        self.assertEqual(via_file.returncode, 0, via_file.stderr)
+        a = (root_a / ".todo" / "task_plan.md").read_text(encoding="utf-8")
+        b = (root_b / ".todo" / "task_plan.md").read_text(encoding="utf-8")
+        self.assertEqual(a, b)
+
+    def test_inline_dash_is_literal(self) -> None:
+        root = self.make_root()
+        result = self.run_plan_input(
+            "piped", "init", "--name", "T", "--goal", "-", "--bounds", "b", str(root)
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        text = (root / ".todo" / "task_plan.md").read_text(encoding="utf-8")
+        self.assertIn("-", text)
+        self.assertNotIn("piped", text)
+
+
 if __name__ == "__main__":
     unittest.main()
