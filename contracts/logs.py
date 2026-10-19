@@ -38,9 +38,6 @@ KINDS = frozenset({
 KNOWLEDGE_KIND = "knowledge"
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_HEADER_RE = re.compile(
-    r"^## (?P<date>\S+) \| (?P<work_item>.+?) \| (?P<kind>\S+)\s*$", re.M
-)
 
 
 class LogEntryError(Exception):

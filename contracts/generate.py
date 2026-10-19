@@ -261,22 +261,27 @@ def render_registry(interfaces: dict[str, Interface],
     return "\n".join(lines) + "\n"
 
 
-def generate(repo_root: Path, cfg: config_mod.Config) -> str:
+def _generate_full(repo_root: Path, cfg: config_mod.Config) -> tuple[str, dict, dict]:
+    """Render the registry text and return it with the resolved
+    (interfaces, unresolved) maps, so callers that need the counts do not
+    have to re-run the extraction pass."""
     interfaces, unresolved = _collect(repo_root, cfg)
     apply_resolutions(interfaces, unresolved, load_resolutions(repo_root))
-    return render_registry(interfaces, unresolved)
+    return render_registry(interfaces, unresolved), interfaces, unresolved
+
+
+def generate(repo_root: Path, cfg: config_mod.Config) -> str:
+    return _generate_full(repo_root, cfg)[0]
 
 
 def main_generate(args) -> int:
     root = find_repo_root()
     try:
-        text = generate(root, args.config)
+        text, interfaces, unresolved = _generate_full(root, args.config)
     except ResolutionError as exc:
         print(f"contracts generate: {exc}", file=sys.stderr)
         return EXIT_FAIL
     (root / REGISTRY_NAME).write_text(text, encoding="utf-8")
-    interfaces, unresolved = _collect(root, args.config)
-    apply_resolutions(interfaces, unresolved, load_resolutions(root))
     print(
         f"registry written: {REGISTRY_NAME} "
         f"({len(interfaces)} interfaces, {len(unresolved)} unresolved targets)"
