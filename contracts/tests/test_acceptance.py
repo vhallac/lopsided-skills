@@ -119,6 +119,34 @@ class TestAcceptance(unittest.TestCase):
         self.assertIn("src/other.py:go", drift.stdout)
         self.assertIn("run `contracts generate` to update", drift.stdout)
 
+    def test_check_with_stale_store_fails_with_named_error(self):
+        # F1: after a resolved call site is removed by an ordinary source
+        # edit, check must fail with a named ResolutionError, not a raw
+        # traceback (same contract as generate).
+        root = self.root
+        _write(root, "src/extra.py",
+               "import helpers\n\n\ndef flow():\n"
+               "    helpers.save(1)\n    obj.handle(2)\n")
+        _write(root, "src/helpers.py", "def save(x):\n    return x\n")
+        self.assertEqual(self.run_cli(root, "generate").returncode, 0)
+        (root / "resolutions-input.toml").write_text(
+            '[[resolution]]\ntarget = "obj.handle"\n'
+            'interface = "helpers:save"\n', encoding="utf-8")
+        proc = self.run_cli(
+            root, "resolve", "--input", str(root / "resolutions-input.toml"),
+            "--date", "2026-10-19", "--work-item", "#8",
+            "--reason", "obj.handle is Widget.handle via injection",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        # Ordinary source edit removes the resolved call site.
+        _write(root, "src/extra.py",
+               "import helpers\n\n\ndef flow():\n    helpers.save(1)\n")
+        stale = self.run_cli(root, "check")
+        self.assertEqual(stale.returncode, 1, stale.stdout + stale.stderr)
+        self.assertIn("contracts check:", stale.stderr)
+        self.assertIn("stale resolution", stale.stderr)
+        self.assertNotIn("Traceback", stale.stderr)
+
     # --- S5: affected query --------------------------------------------------
 
     def test_affected_lists_sites_and_flags_removals(self):

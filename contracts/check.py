@@ -72,10 +72,17 @@ def check(root: Path, cfg) -> list[str]:
 
 
 def main_check(args) -> int:
+    import sys
+
     from .cli import find_repo_root
+    from .resolutions import ResolutionError
 
     root = find_repo_root()
-    problems = check(root, args.config)
+    try:
+        problems = check(root, args.config)
+    except ResolutionError as exc:
+        print(f"contracts check: {exc}", file=sys.stderr)
+        return EXIT_FAIL
     if not problems:
         print("registry.md is up to date with source")
         return EXIT_OK
