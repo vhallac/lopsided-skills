@@ -147,6 +147,56 @@ class TestAcceptance(unittest.TestCase):
         self.assertIn("stale resolution", stale.stderr)
         self.assertNotIn("Traceback", stale.stderr)
 
+    def test_resolve_prune_stale_recovers_store(self):
+        # R2.F1 (recovery half): a stale store must be recoverable with a
+        # supported command, not hand-editing resolutions.toml.
+        root = self.root
+        _write(root, "src/extra.py",
+               "import helpers\n\n\ndef flow():\n"
+               "    helpers.save(1)\n    obj.handle(2)\n    db.write(3)\n")
+        _write(root, "src/helpers.py", "def save(x):\n    return x\n")
+        self.assertEqual(self.run_cli(root, "generate").returncode, 0)
+        (root / "resolutions-input.toml").write_text(
+            '[[resolution]]\ntarget = "obj.handle"\n'
+            'interface = "helpers:save"\n'
+            '[[resolution]]\ntarget = "db.write"\n'
+            'external = true\n', encoding="utf-8")
+        proc = self.run_cli(
+            root, "resolve", "--input", str(root / "resolutions-input.toml"),
+            "--date", "2026-10-19", "--work-item", "#8",
+            "--reason", "bind obj.handle; helpers.save is external",
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        # Source edit removes the resolved call site -> one stale entry;
+        # the external entry (no call site) stays valid.
+        _write(root, "src/extra.py",
+               "import helpers\n\n\ndef flow():\n"
+               "    helpers.save(1)\n    db.write(3)\n")
+        prune = self.run_cli(root, "resolve", "--prune-stale",
+                             "--date", "2026-10-20", "--work-item", "#8",
+                             "--reason", "call site removed by source edit")
+        self.assertEqual(prune.returncode, 0, prune.stdout + prune.stderr)
+        self.assertIn("pruned stale: [obj.handle]", prune.stdout)
+        self.assertIn("kept 1 of 2 entries", prune.stdout)
+        store_text = (root / "resolutions.toml").read_text(encoding="utf-8")
+        self.assertNotIn('target = "obj.handle"', store_text)
+        self.assertIn('target = "db.write"', store_text)
+        log_text = (root / "decision-log.md").read_text(encoding="utf-8")
+        self.assertIn("pruned stale resolution entries: [obj.handle]", log_text)
+        # Store is clean again: check is green and a second prune is a no-op.
+        self.assertEqual(self.run_cli(root, "check").returncode, 0)
+        again = self.run_cli(root, "resolve", "--prune-stale",
+                             "--date", "2026-10-21", "--work-item", "#8",
+                             "--reason", "no-op")
+        self.assertEqual(again.returncode, 0, again.stderr)
+        self.assertIn("no stale entries", again.stdout)
+        # --prune-stale and --input are mutually exclusive.
+        both = self.run_cli(root, "resolve", "--prune-stale", "--input", "x.toml",
+                            "--date", "2026-10-22", "--work-item", "#8",
+                            "--reason", "conflict")
+        self.assertEqual(both.returncode, 1, both.stderr)
+        self.assertIn("mutually exclusive", both.stderr)
+
     # --- S5: affected query --------------------------------------------------
 
     def test_affected_lists_sites_and_flags_removals(self):

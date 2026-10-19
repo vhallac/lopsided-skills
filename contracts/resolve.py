@@ -16,6 +16,7 @@ from pathlib import Path
 from . import generate as generate_mod
 from .cli import EXIT_FAIL, EXIT_OK, find_repo_root
 from .generate import UnresolvedTarget
+from .generate import REGISTRY_NAME
 from .logs import DECISION_LOG, LogEntryError, append_entry, build_decision_entry
 from .resolutions import (
     RESOLUTIONS_NAME,
@@ -57,8 +58,78 @@ def _validate_against_source(entries: list[Resolution], existing_keys: set,
             )
 
 
+def _prune_stale(root, args) -> int:
+    """Recovery path (R2.F1): drop stale entries from resolutions.toml.
+
+    Every store entry is replayed against a fresh source snapshot, one at a
+    time; entries that fail are stale. Nothing is mutated unless the pruned
+    store still applies cleanly — then the store is saved, the registry is
+    regenerated, and one decision-log entry records the pruned targets.
+    """
+    store = load_resolutions(root)
+    interfaces, unresolved = generate_mod._collect(root, args.config)
+    def _snapshot() -> tuple[dict, dict]:
+        return (
+            {k: v for k, v in interfaces.items()},
+            {k: UnresolvedTarget(set(v.call_sites)) for k, v in unresolved.items()},
+        )
+
+    kept: list[Resolution] = []
+    pruned: list[Resolution] = []
+    scratch_interfaces, scratch_unresolved = _snapshot()
+    fresh_interfaces, fresh_unresolved = _snapshot()
+    for r in store:
+        try:
+            generate_mod.apply_resolutions(scratch_interfaces,
+                                           scratch_unresolved, [r])
+            kept.append(r)
+        except ResolutionError:
+            pruned.append(r)
+    if not pruned:
+        print("contracts resolve: no stale entries in " + RESOLUTIONS_NAME)
+        return EXIT_OK
+    # The pruned store must still apply cleanly before anything is mutated.
+    try:
+        generate_mod.apply_resolutions(fresh_interfaces, fresh_unresolved, kept)
+    except ResolutionError as exc:
+        print(f"contracts resolve: {exc}", file=sys.stderr)
+        return EXIT_FAIL
+    try:
+        entry = build_decision_entry(
+            date=args.date,
+            work_item=args.work_item,
+            kind="unresolved",
+            affected=[f"{RESOLUTIONS_NAME}: pruned stale {r.describe()}"
+                      for r in pruned],
+            decision="pruned stale resolution entries: "
+                     + "; ".join(r.describe() for r in pruned),
+            reason=args.reason,
+        )
+        append_entry(root, DECISION_LOG, entry)
+        save_resolutions(root, kept)
+        text = generate_mod.generate(root, args.config)
+        (root / generate_mod.REGISTRY_NAME).write_text(text, encoding="utf-8")
+    except (ResolutionError, LogEntryError) as exc:
+        print(f"contracts resolve: {exc}", file=sys.stderr)
+        return EXIT_FAIL
+    for r in pruned:
+        print(f"pruned stale: {r.describe()}")
+    print(f"registry regenerated; kept {len(kept)} of {len(store)} entries")
+    return EXIT_OK
+
+
 def main_resolve(args) -> int:
     root = find_repo_root()
+    if getattr(args, "prune_stale", False):
+        if args.input is not None:
+            print("contracts resolve: --prune-stale and --input are mutually exclusive",
+                  file=sys.stderr)
+            return EXIT_FAIL
+        return _prune_stale(root, args)
+    if args.input is None:
+        print("contracts resolve: --input is required (or use --prune-stale)",
+              file=sys.stderr)
+        return EXIT_FAIL
     input_path = Path(args.input)
     if args.input == "-":
         input_text = sys.stdin.read()

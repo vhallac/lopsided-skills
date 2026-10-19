@@ -77,8 +77,12 @@ def build_parser() -> argparse.ArgumentParser:
         func_name="main_log")
     p_resolve = sub.add_parser("resolve",
                                help="apply resolutions to the registry Unresolved section")
-    p_resolve.add_argument("--input", required=True,
+    p_resolve.add_argument("--input", required=False,
                            help="resolutions input file ([[resolution]] TOML entries)")
+    p_resolve.add_argument("--prune-stale", dest="prune_stale", action="store_true",
+                           help="remove stale entries from resolutions.toml and "
+                                "regenerate the registry (recovery path; mutually "
+                                "exclusive with --input)")
     p_resolve.add_argument("--date", required=True,
                            help="decision-log entry date (YYYY-MM-DD)")
     p_resolve.add_argument("--work-item", dest="work_item", required=True,
