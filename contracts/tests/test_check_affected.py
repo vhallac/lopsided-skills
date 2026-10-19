@@ -203,6 +203,14 @@ class CheckAffectedCliTest(_Base):
         proc = self.run_cli("affected")
         self.assertEqual(proc.returncode, 2)
 
+    def test_affected_cli_bad_diff_ref_is_usage_error(self):
+        """F2: an invalid --diff ref prints a named usage error, not a traceback."""
+        self.run_cli("generate")
+        proc = self.run_cli("affected", "--diff", "nosuchref")
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("invalid --diff ref", proc.stderr)
+        self.assertNotIn("Traceback", proc.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

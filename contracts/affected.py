@@ -15,7 +15,7 @@ from typing import TextIO
 from pathlib import Path
 
 from . import generate as generate_mod
-from .cli import EXIT_FAIL, EXIT_OK, find_repo_root
+from .cli import EXIT_FAIL, EXIT_OK, EXIT_USAGE, find_repo_root
 from .generate import CallSite
 from .registry import parse_registry
 
@@ -101,7 +101,15 @@ def main_affected(args) -> int:
     if not registry_path.is_file():
         print(f"contracts: no {generate_mod.REGISTRY_NAME} — run `contracts generate` first")
         return EXIT_FAIL
-    changed = changed_files(root, args.diff)
+    try:
+        changed = changed_files(root, args.diff)
+    except subprocess.CalledProcessError as exc:
+        print(
+            f"contracts affected: invalid --diff ref {args.diff!r}: "
+            f"git diff failed ({exc.stderr.strip() or 'unknown git error'})",
+            file=sys.stderr,
+        )
+        return EXIT_USAGE
     affected = affected_interfaces(
         root, registry_path.read_text(encoding="utf-8"), args.config, changed
     )
