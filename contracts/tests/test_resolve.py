@@ -235,6 +235,58 @@ class TestResolve(unittest.TestCase):
         self.assertFalse((self.root / "resolutions.toml").exists())
         self.assertFalse((self.root / "decision-log.md").exists())
 
+    def test_entry_invalidated_by_earlier_entry_rejected(self):
+        """F1: entry #2 invalidated by entry #1 fails the pre-merge dry run;
+        nothing is mutated and generate/check still succeed afterwards."""
+        self._generate()
+        self.input.write_text(
+            GOOD_INPUT
+            + '[[resolution]]\ntarget = "obj.handle"\nexternal = true\n',
+            encoding="utf-8")
+        result = _run(["resolve", "--input", str(self.input),
+                       "--date", "2026-10-18", "--work-item", "#8",
+                       "--reason", "r"], self.root)
+        self.assertEqual(result.returncode, EXIT_FAIL)
+        self.assertIn("resolution #2", result.stderr)
+        self.assertFalse((self.root / "resolutions.toml").exists())
+        self.assertFalse((self.root / "decision-log.md").exists())
+        self.assertEqual(_run(["generate"], self.root).returncode, EXIT_OK)
+        self.assertEqual(_run(["check"], self.root).returncode, EXIT_OK)
+
+    def test_duplicate_identical_entries_rejected(self):
+        self._generate()
+        self.input.write_text(GOOD_INPUT + GOOD_INPUT, encoding="utf-8")
+        result = _run(["resolve", "--input", str(self.input),
+                       "--date", "2026-10-18", "--work-item", "#8",
+                       "--reason", "r"], self.root)
+        self.assertEqual(result.returncode, EXIT_FAIL)
+        self.assertFalse((self.root / "resolutions.toml").exists())
+
+    def test_stale_store_rejected_before_mutation(self):
+        """F1: an already-stale store rejects resolve up front (named error,
+        nothing mutated) instead of failing mid-mutation in generate."""
+        self._generate()
+        _run(["resolve", "--input", str(self.input), "--date", "2026-10-18",
+              "--work-item", "#8", "--reason", "r"], self.root)
+        store_before = (self.root / "resolutions.toml").read_text(encoding="utf-8")
+        log_before = (self.root / "decision-log.md").read_text(encoding="utf-8")
+        # Remove the resolved call site from the source: store becomes stale.
+        (self.root / "src" / "main.py").write_text(
+            "import helpers\n\ndef flow():\n    helpers.save(1)\n",
+            encoding="utf-8")
+        (self.root / "registry.md").unlink()
+        (self.root / "decision-log.md").unlink()
+        self.input.write_text(
+            '[[resolution]]\ntarget = "helpers.save"\nexternal = true\n',
+            encoding="utf-8")
+        result = _run(["resolve", "--input", str(self.input),
+                       "--date", "2026-10-19", "--work-item", "#9",
+                       "--reason", "r"], self.root)
+        self.assertEqual(result.returncode, EXIT_FAIL)
+        self.assertIn("stale", result.stderr)
+        self.assertEqual((self.root / "resolutions.toml").read_text(encoding="utf-8"),
+                         store_before)
+
     def test_bad_log_fields_rejected(self):
         self._generate()
         result = _run(["resolve", "--input", str(self.input),

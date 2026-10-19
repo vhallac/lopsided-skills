@@ -29,11 +29,16 @@ from .resolutions import (
 
 def _validate_against_source(entries: list[Resolution], existing_keys: set,
                              interfaces, unresolved) -> None:
-    """Reject any entry that cannot be applied; message names entry and field."""
+    """Reject any entry that cannot be applied; message names entry and field.
+
+    existing_keys is updated in place with each entry's key, so duplicate
+    keys within the input file are rejected too.
+    """
     for i, r in enumerate(entries):
         prefix = f"resolution #{i + 1} ({r.describe()})"
         if r.key in existing_keys:
             raise ResolutionError(f"{prefix}: already resolved in {RESOLUTIONS_NAME}")
+        existing_keys.add(r.key)
         sites: UnresolvedTarget | None = unresolved.get(r.target)
         if sites is None:
             raise ResolutionError(
@@ -77,8 +82,15 @@ def main_resolve(args) -> int:
 
     store = load_resolutions(root)
     interfaces, unresolved = generate_mod._collect(root, args.config)
+    # Pre-merge dry run (nothing is mutated here): replay the durable store
+    # against the fresh snapshot, then validate the new entries against the
+    # post-store state and dry-apply them. Any failure — a stale store, an
+    # entry invalidated by an earlier entry in the same file, a duplicate
+    # entry — rejects the whole input file before any mutation.
     try:
+        generate_mod.apply_resolutions(interfaces, unresolved, store)
         _validate_against_source(entries, {r.key for r in store}, interfaces, unresolved)
+        generate_mod.apply_resolutions(interfaces, unresolved, entries)
     except ResolutionError as exc:
         print(f"contracts resolve: {exc}", file=sys.stderr)
         return EXIT_FAIL
