@@ -10,6 +10,10 @@ import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+# Sibling test modules (test_generate) must be importable regardless of how
+# the suite was invoked: as top-level modules (discover tests/) or as the
+# tests package (python -m unittest from the package root).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 
 class TestCli(unittest.TestCase):

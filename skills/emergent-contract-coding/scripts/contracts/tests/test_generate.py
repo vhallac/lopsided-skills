@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 PACKAGE_ROOT = str(Path(__file__).resolve().parents[2])
+sys.path.insert(0, PACKAGE_ROOT)  # contracts package, whatever the cwd
 
 from contracts import config as config_mod
 from contracts import generate as generate_mod

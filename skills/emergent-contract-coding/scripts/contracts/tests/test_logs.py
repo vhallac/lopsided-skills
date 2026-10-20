@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+
+PACKAGE_ROOT = str(Path(__file__).resolve().parents[2])
+sys.path.insert(0, PACKAGE_ROOT)  # contracts package, whatever the cwd
 
 from contracts.logs import (
     DECISION_LOG,
