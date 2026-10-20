@@ -137,19 +137,85 @@ def _classify(identifier: str, cfg: config_mod.Config) -> tuple[str, str]:
     return direction, authority
 
 
-def _collect(repo_root: Path, cfg: config_mod.Config):
-    """Return (interfaces, unresolved) extracted from the source trees."""
-    py_files: list[tuple[str, Path, Path]] = []  # (rel, path, tree base)
+class Extractor:
+    """A language extractor: collects interfaces and unresolved targets
+    from the source files its extensions claim (S1 boundary).
+
+    `collect` receives the claimed files as (rel, path, base) tuples and
+    returns (interfaces, unresolved, in_tree) where in_tree is the set of
+    module names (and dotted prefixes) the extractor actually parsed — used
+    for the S3 rigid default.
+    """
+
+    def __init__(self, extensions: tuple[str, ...], collect) -> None:
+        self.extensions = frozenset(extensions)
+        self.collect = collect
+
+
+_EXTRACTORS: list[Extractor] = [
+    Extractor(extensions=(".py",), collect=None),  # filled in below
+]
+
+
+def _extractor_for(suffix: str) -> Extractor | None:
+    """Extension-to-extractor dispatch: first registered extractor wins."""
+    for extractor in _EXTRACTORS:
+        if suffix in extractor.extensions:
+            return extractor
+    return None
+
+
+def _claim_files(repo_root: Path, cfg: config_mod.Config) -> dict[Extractor, list[tuple[str, Path, Path]]]:
+    """Walk the source trees and group files by their owning extractor."""
+    groups: dict[Extractor, list[tuple[str, Path, Path]]] = {}
     for tree in cfg.source_trees:
         base = repo_root / tree
         if base.is_dir():
-            for f in sorted(base.rglob("*.py")):
-                py_files.append((f.relative_to(repo_root).as_posix(), f, base))
-    py_files.sort()
+            for f in sorted(base.rglob("*")):
+                if not f.is_file():
+                    continue
+                extractor = _extractor_for(f.suffix)
+                if extractor is None:  # unclaimed extensions are skipped
+                    continue
+                groups.setdefault(extractor, []).append(
+                    (f.relative_to(repo_root).as_posix(), f, base)
+                )
+    for files in groups.values():
+        files.sort()
+    return groups
 
+
+def _collect(repo_root: Path, cfg: config_mod.Config):
+    """Return (interfaces, unresolved): each extractor collects over the
+    files its extensions claim; results are merged across extractors."""
+    interfaces: dict[str, Interface] = {}
+    unresolved: dict[str, UnresolvedTarget] = {}
+    in_tree: set[str] = set()
+    for extractor in _EXTRACTORS:
+        files = _claim_files(repo_root, cfg).get(extractor, [])
+        if not files:
+            continue
+        ex_ifaces, ex_unresolved, ex_in_tree = extractor.collect(repo_root, files)
+        for ident, iface in ex_ifaces.items():
+            interfaces.setdefault(ident, Interface()).call_sites |= iface.call_sites
+        for target, site in ex_unresolved.items():
+            unresolved.setdefault(target, UnresolvedTarget()).call_sites |= site.call_sites
+        in_tree |= ex_in_tree
+
+    in_tree = _in_tree_module_prefixes(in_tree)
+    for ident, iface in interfaces.items():
+        iface.direction, iface.authority = _classify(ident, cfg)
+        if ident.split(":")[0] not in in_tree:
+            iface.authority = "rigid"  # S3: outside the source trees defaults to rigid
+    return interfaces, unresolved
+
+
+def _collect_python(repo_root: Path, files: list[tuple[str, Path, Path]]):
+    """Python extractor (stdlib ast): resolve call targets via imports
+    and same-module definitions."""
     index = _ModuleIndex()
     modules: dict[str, ast.AST] = {}
-    for rel, path, base in py_files:
+    for rel, path, base in files:
         module = _module_of(base, path)
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=rel)
         modules[module] = tree
@@ -158,16 +224,13 @@ def _collect(repo_root: Path, cfg: config_mod.Config):
     interfaces: dict[str, Interface] = {}
     unresolved: dict[str, UnresolvedTarget] = {}
 
-    for rel, path, base in py_files:
+    for rel, path, base in files:
         module = _module_of(base, path)
         _walk(modules[module], [], module, rel, index, interfaces, unresolved)
+    return interfaces, unresolved, _in_tree_module_prefixes(set(modules))
 
-    in_tree = _in_tree_module_prefixes(modules)
-    for ident, iface in interfaces.items():
-        iface.direction, iface.authority = _classify(ident, cfg)
-        if ident.split(":")[0] not in in_tree:
-            iface.authority = "rigid"  # S3: outside the source trees defaults to rigid
-    return interfaces, unresolved
+
+_EXTRACTORS[0] = Extractor(extensions=(".py",), collect=_collect_python)
 
 
 def apply_resolutions(interfaces: dict[str, Interface],
