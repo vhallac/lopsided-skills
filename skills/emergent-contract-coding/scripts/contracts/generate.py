@@ -239,6 +239,10 @@ def _register_ts() -> None:
     """Register the TypeScript extractor when tree-sitter is available;
     without it the substrate stays Python-only (lazy import, no hard dep)."""
     try:
+        import tree_sitter  # noqa: F401  real availability probe (R2.F1):
+    except ImportError:   # ts_extract defers its own imports to collect time
+        return
+    try:
         from . import ts_extract
     except ImportError:
         return

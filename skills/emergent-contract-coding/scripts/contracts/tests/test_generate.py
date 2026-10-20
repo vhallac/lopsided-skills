@@ -192,5 +192,61 @@ class GenerateCliTest(unittest.TestCase):
         self.assertEqual(first, second)
 
 
+class TestTsGuardDegradation(unittest.TestCase):
+    """R2.F1 regression (PR !21 review round 2): _register_ts() must probe
+    tree-sitter itself. Pre-fix it only imported ts_extract (which defers
+    its tree-sitter imports to collect time), so the guard never fired and
+    a mixed tree made `generate` crash with ModuleNotFoundError instead of
+    degrading to a Python-only registry (SKILL.md: bare-environment rule,
+    decision 009)."""
+
+    def setUp(self):
+        import tempfile
+
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        (self.root / "contracts.toml").write_text(CONFIG, encoding="utf-8")
+        _write(self.root, "src/pkg/__init__.py", "")
+        _write(self.root, "src/pkg/api.py", "def api_create(x):\n    return x\n")
+        _write(self.root, "src/app.py",
+               "from pkg.api import api_create\n\ndef run():\n    return api_create(1)\n")
+        _write(self.root, "src/ui.ts",
+               'import { api_create } from "./pkg/api";\n\n'
+               "export function render(): number {\n  return api_create(2);\n}\n")
+        # Stub that makes `import tree_sitter` fail with ImportError no
+        # matter whether the real dependency is installed: first position
+        # on sys.path shadows any real install.
+        self._stub = Path(self._tmp.name) / "_ts_stub"
+        self._stub.mkdir()
+        (self._stub / "tree_sitter.py").write_text(
+            'raise ImportError("stubbed out for TestTsGuardDegradation")\n',
+            encoding="utf-8",
+        )
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def run_cli(self, *argv):
+        env = dict(os.environ)
+        env["PYTHONPATH"] = os.pathsep.join(
+            [str(self._stub), PACKAGE_ROOT]
+            + [p for p in env.get("PYTHONPATH", "").split(os.pathsep) if p]
+        )
+        return subprocess.run(
+            [sys.executable, "-m", "contracts", *argv],
+            cwd=self.root,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+
+    def test_mixed_tree_degrades_to_python_only(self):
+        proc = self.run_cli("generate")
+        self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+        reg = (self.root / "registry.md").read_text(encoding="utf-8")
+        self.assertIn("### pkg.api:api_create", reg)
+        self.assertNotIn(".ts", reg)  # ui.ts unclaimed -> skipped
+
+
 if __name__ == "__main__":
     unittest.main()
