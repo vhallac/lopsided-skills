@@ -215,6 +215,13 @@ from anywhere, or `python3 -m contracts <command>` from the `scripts/`
 directory. Its tests run with `python3 -m unittest discover contracts/tests`
 from that same directory.
 
+Language support: Python sources (`.py`) are always extracted (stdlib `ast`);
+TypeScript sources (`.ts`/`.tsx`) are extracted when tree-sitter is installed
+(`pip install -r <skill-directory>/scripts/requirements.txt`); other file
+extensions in the `[source] tree` are skipped. A single `contracts.toml` may
+mix Python and TypeScript directories; interfaces from both extractors are
+merged in one registry.
+
 Extensions to step 2:
 
 - **2.a.** IF the `affected` output marks unresolved calls that affect the

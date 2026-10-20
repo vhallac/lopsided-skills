@@ -16,7 +16,11 @@ Config lives at the repository root as `contracts.toml`:
 
 Direction and change authority are independent axes: an interface may appear
 in both [inputs] and [rigid]. Unlisted source-tree code defaults to
-internal/lax. Missing or invalid config refuses to run with a meaningful
+internal/lax.
+
+Source trees may mix languages: `.py` files are extracted always (stdlib
+ast), `.ts`/`.tsx` when tree-sitter is installed; other extensions are
+skipped. Interfaces from all extractors are merged into one registry. Missing or invalid config refuses to run with a meaningful
 error naming the problem.
 """
 
