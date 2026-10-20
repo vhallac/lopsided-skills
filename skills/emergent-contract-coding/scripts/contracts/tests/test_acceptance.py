@@ -23,6 +23,13 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
+try:
+    from contracts import ts_extract as _ts_probe
+    _ts_probe._language()  # tree-sitter import is lazy: probe it
+    HAS_TS = True
+except ImportError:
+    HAS_TS = False
+
 CONFIG = """\
 [source]
 tree = ["src"]
@@ -51,6 +58,35 @@ def _write(root: Path, rel: str, text: str) -> None:
     p = root / rel
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(text, encoding="utf-8")
+
+
+CONFIG_MIXED = """\
+[source]
+tree = ["src"]
+
+[inputs]
+patterns = ["pkg.api:api_*", "web/api:apiCreate"]
+"""
+
+TS_API_SRC = """\
+export function apiCreate(x: number): number {
+  return x;
+}
+"""
+
+TS_CALLER_SRC = """\
+import { apiCreate } from "./api";
+
+export function run(): number {
+  return apiCreate(1);
+}
+"""
+
+JS_UNCLAIMED_SRC = """\
+export function apiCreate(x) {
+  return x;
+}
+"""
 
 
 class TestAcceptance(unittest.TestCase):
@@ -286,3 +322,59 @@ class TestAcceptance(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestMixedLanguageAcceptance(unittest.TestCase):
+    """Unit-004: a source tree holding Python and TypeScript files is
+    accepted by config and handled end-to-end; files with unclaimed
+    extensions (.js) are skipped. Requires tree-sitter for the TS half."""
+
+    def setUp(self):
+        if not HAS_TS:
+            self.skipTest("tree-sitter dependencies not installed")
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.addCleanup(self._tmp.cleanup)
+        (self.root / "contracts.toml").write_text(CONFIG_MIXED, encoding="utf-8")
+        _write(self.root, "src/pkg/__init__.py", "")
+        _write(self.root, "src/pkg/api.py", API_SRC)
+        _write(self.root, "src/app.py", CALLER_SRC)
+        _write(self.root, "src/web/api.ts", TS_API_SRC)
+        _write(self.root, "src/web/index.ts", TS_CALLER_SRC)
+        _write(self.root, "src/web/util.js", JS_UNCLAIMED_SRC)
+
+    def run_cli(self, root: Path, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [sys.executable, "-m", "contracts", *args],
+            cwd=root,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
+        )
+
+    def test_mixed_tree_end_to_end(self):
+        # generate accepts the mixed tree and merges both extractors.
+        first = self.run_cli(self.root, "generate")
+        self.assertEqual(first.returncode, 0, first.stderr)
+        reg = self.root / "registry.md"
+        self.assertTrue(reg.is_file())
+        text = reg.read_text(encoding="utf-8")
+        # Python side of the mixed tree.
+        self.assertIn("### pkg.api:api_create", text)
+        self.assertIn("- src/app.py:run", text)
+        # TypeScript side of the mixed tree.
+        self.assertIn("### web/api:apiCreate", text)
+        self.assertIn("- src/web/index.ts:run", text)
+        # Unclaimed extension (.js) is skipped: no util.js call sites.
+        self.assertNotIn("util.js", text)
+        # Idempotent: a second generate is byte-identical.
+        bytes1 = reg.read_bytes()
+        second = self.run_cli(self.root, "generate")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual(bytes1, reg.read_bytes())
+        # check is green on the freshly generated registry.
+        green = self.run_cli(self.root, "check")
+        self.assertEqual(green.returncode, 0, green.stdout + green.stderr)
+        self.assertIn("up to date", green.stdout)
