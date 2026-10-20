@@ -12,7 +12,8 @@ writes registry.md with:
     by file then enclosing symbol; line numbers deliberately excluded so
     unrelated edits do not churn the registry)
 
-Resolution model (intentionally small, stdlib ast only):
+Resolution model (Python extractor: stdlib ast only; TypeScript extractor:
+tree-sitter — see ts_extract.py, registered when tree-sitter is installed):
   - `import mod` / `import mod as m` + `mod.fn()` / `m.sub.fn()`  → mod.sub:fn
   - `from mod import fn` / `from mod import fn as f` + `fn()`     → mod:fn
   - calls to top-level names defined in the same module            → mod:qual
@@ -231,6 +232,19 @@ def _collect_python(repo_root: Path, files: list[tuple[str, Path, Path]]):
 
 
 _EXTRACTORS[0] = Extractor(extensions=(".py",), collect=_collect_python)
+
+
+def _register_ts() -> None:
+    """Register the TypeScript extractor when tree-sitter is available;
+    without it the substrate stays Python-only (lazy import, no hard dep)."""
+    try:
+        from . import ts_extract
+    except ImportError:
+        return
+    _EXTRACTORS.append(Extractor(extensions=(".ts", ".tsx"), collect=ts_extract.collect))
+
+
+_register_ts()
 
 
 def apply_resolutions(interfaces: dict[str, Interface],
