@@ -100,7 +100,12 @@ class TestAcceptance(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,
-            env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
+            env={
+                **os.environ,
+                "PYTHONPATH": os.pathsep.join(
+                    q for q in (str(REPO_ROOT), os.environ.get("PYTHONPATH", "")) if q
+                ),
+            },
         )
 
     def git(self, root: Path, *argv: str) -> None:
@@ -351,7 +356,12 @@ class TestMixedLanguageAcceptance(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,
-            env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
+            env={
+                **os.environ,
+                "PYTHONPATH": os.pathsep.join(
+                    q for q in (str(REPO_ROOT), os.environ.get("PYTHONPATH", "")) if q
+                ),
+            },
         )
 
     def test_mixed_tree_end_to_end(self):

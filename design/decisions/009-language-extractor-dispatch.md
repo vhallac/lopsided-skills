@@ -11,7 +11,7 @@ extractors, each extractor yields the same interface/call-site structures,
 and mixed-language `source_trees` merge into one registry. `.py` is parsed
 with stdlib `ast` (always available); `.ts`/`.tsx` are parsed with
 tree-sitter (optional dependency, declared in
-`skills/emergent-contract-coding/scripts/contracts/requirements.txt`);
+`skills/emergent-contract-coding/scripts/requirements.txt`);
 extensions without an extractor are skipped. The TS extractor is imported
 lazily inside the collect step to avoid a circular import.
 

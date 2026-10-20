@@ -33,11 +33,14 @@ def _shared():
     return CallSite, Interface, UnresolvedTarget, _in_tree_module_prefixes
 
 
-def _language():
+def _language(suffix: str = ".ts"):
     import tree_sitter
     import tree_sitter_typescript
 
-    lang = tree_sitter.Language(tree_sitter_typescript.language_typescript())
+    if suffix == ".tsx":
+        lang = tree_sitter.Language(tree_sitter_typescript.language_tsx())
+    else:
+        lang = tree_sitter.Language(tree_sitter_typescript.language_typescript())
     try:
         return tree_sitter.Parser(lang)
     except TypeError:  # py-tree-sitter < 0.22
@@ -137,16 +140,18 @@ def _resolve_import_source(source: str, module: str, parsed_modules: set[str]) -
     if not source.startswith("."):
         return None  # npm package or path alias: not resolved here
     base_dir = module.rsplit("/", 1)[0] if "/" in module else ""
-    parts: list[str] = []
+    # Pop against the joint stack so traversal may pass through and beyond
+    # the importing module's own directory into parent directories.
+    stack: list[str] = base_dir.split("/") if base_dir else []
     for seg in source.split("/"):
-        if seg == ".":
+        if seg in (".", ""):
             continue
         elif seg == "..":
-            if parts:
-                parts.pop()
+            if stack:
+                stack.pop()
         else:
-            parts.append(seg)
-    stem = "/".join(p for p in ([base_dir] if base_dir else []) + parts)
+            stack.append(seg)
+    stem = "/".join(stack)
     for candidate in (stem, f"{stem}/index"):
         if candidate in parsed_modules:
             return candidate
@@ -192,13 +197,19 @@ def collect(repo_root: Path, files: list[tuple[str, Path, Path]]):
     CallSite, Interface, UnresolvedTarget, _in_tree_module_prefixes = _shared()
     globals().update(CallSite=CallSite, Interface=Interface,
                      UnresolvedTarget=UnresolvedTarget)
-    parser = _language()
+    parsers: dict[str, object] = {}
+
+    def parser_for(suffix: str):
+        if suffix not in parsers:
+            parsers[suffix] = _language(suffix)
+        return parsers[suffix]
+
     modules: dict[str, object] = {}
     top_names: dict[str, set[str]] = {}
     binds: dict[str, dict] = {}
     for rel, path, base in files:
         module = _module_of(base, path)
-        tree = parser.parse(path.read_bytes())
+        tree = parser_for(path.suffix).parse(path.read_bytes())
         modules[module] = tree
         top_names[module], _defs = _top_level_defs(tree.root_node)
         binds[module] = {}  # filled after all modules are known

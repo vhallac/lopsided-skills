@@ -192,8 +192,9 @@ def _collect(repo_root: Path, cfg: config_mod.Config):
     interfaces: dict[str, Interface] = {}
     unresolved: dict[str, UnresolvedTarget] = {}
     in_tree: set[str] = set()
+    claimed = _claim_files(repo_root, cfg)  # hoisted: one walk for all extractors
     for extractor in _EXTRACTORS:
-        files = _claim_files(repo_root, cfg).get(extractor, [])
+        files = claimed.get(extractor, [])
         if not files:
             continue
         ex_ifaces, ex_unresolved, ex_in_tree = extractor.collect(repo_root, files)

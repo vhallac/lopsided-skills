@@ -94,7 +94,12 @@ class TestTsAcceptance(unittest.TestCase):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             check=False,
-            env={**os.environ, "PYTHONPATH": str(REPO_ROOT)},
+            env={
+                **os.environ,
+                "PYTHONPATH": os.pathsep.join(
+                    p for p in (str(REPO_ROOT), os.environ.get("PYTHONPATH", "")) if p
+                ),
+            },
         )
 
     def git(self, root: Path, *argv: str) -> None:
@@ -277,6 +282,58 @@ class TestTsAcceptance(unittest.TestCase):
         tampered = self.run_cli(self.root, "log", "check")
         self.assertEqual(tampered.returncode, 1, tampered.stdout)
         self.assertIn("earlier content modified", tampered.stdout + tampered.stderr)
+
+
+@unittest.skipUnless(HAS_TS, "tree-sitter dependencies not installed")
+class TestTsExtractorFixes(unittest.TestCase):
+    """Regression guards for review round 1 (PR !21): F1 deep `../..`
+    import resolution, F2 .tsx parsing."""
+
+    def _collect_tree(self, files: dict[str, str]) -> dict:
+        from contracts import ts_extract
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp)  # base doubles as the source-tree root
+            for rel, text in files.items():
+                p = base / rel
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_text(text, encoding="utf-8")
+            entries = [
+                (rel, base / rel, base) for rel in sorted(files)
+            ]
+            interfaces, unresolved, _ = ts_extract.collect(base, entries)
+        return interfaces, unresolved
+
+    def test_two_level_parent_import_resolves(self):
+        """F1: `../../x` from src/services/orders.ts reaches src/x."""
+        interfaces, _ = self._collect_tree({
+            "core/deep/util.ts": "export function helper(): number {\n  return 1;\n}\n",
+            "services/orders.ts": (
+                'import { helper } from "../../core/deep/util";\n\n'
+                "export function place(): number {\n  return helper();\n}\n"
+            ),
+        })
+        self.assertIn("core/deep/util:helper", interfaces)
+        self.assertEqual(
+            {s.symbol for s in interfaces["core/deep/util:helper"].call_sites},
+            {"place"},
+        )
+
+    def test_tsx_call_site_resolves(self):
+        """F2: a .tsx file's JSX-embedded call site parses and resolves."""
+        interfaces, unresolved = self._collect_tree({
+            "src/web/handler.ts": "export function handler(): void {}\n",
+            "src/web/button.tsx": (
+                'import { handler } from "./handler";\n\n'
+                "export function Button() {\n"
+                "  return <div onClick={handler()}>ok</div>;\n"
+                "}\n"
+            ),
+        })
+        self.assertIn("src/web/handler:handler", interfaces)
+        self.assertIn("src/web/button.tsx", {
+            s.file for s in interfaces["src/web/handler:handler"].call_sites
+        })
 
 
 if __name__ == "__main__":
