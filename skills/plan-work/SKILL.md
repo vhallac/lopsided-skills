@@ -150,6 +150,65 @@ differential diff, or a canary run. Write a new test only when it locks a bug
 or is the named check of a decision. Never write one only so `verify` has
 something to run. If the honest check is inspection, say so and label it weak.
 
+### Extra information (optional)
+
+A plan may carry plan-local analysis artifacts in an optional **"Extra
+information"** section. This is analysis input that frontloads the holistic
+read — story use case at sea level decomposed into below-sea-level flows — so
+the executor consumes the result instead of re-deriving it. It is **not
+enforcement**: no new verification mode. A plan that needs no artifacts omits
+the section. The container is extensible: other kinds may earn their place
+later without changing the section.
+
+```
+## Extra information
+
+- kind: decision-ref | <NNN-topic-slug>
+  <one line: what this plan takes from it, and where it bites> (units: 3, 5)
+
+- kind: flow | unit-003
+  <main success scenario in domain vocabulary, result-bound>
+
+- kind: assumption | A-1
+  <statement> (units: 4)
+```
+
+Kinds:
+
+- **`flow`** — binds to one unit (`kind: flow | unit-NNN`); that unit reads it
+  as part of its **input**. Record flows for units whose approach a fresh
+  executor should not re-derive. Write in domain vocabulary with result
+  binding; the section says nothing about naming (or not naming) endpoints —
+  below-sea-level comes from the structure, not from policing mentions.
+- **`assumption`** — plan-level. A design decision that should have been: an
+  observation-backed pre-decision (e.g. "_ConfigService_ owns retry policy").
+  Executors hold assumptions as entitlement-without-re-verification; if
+  execution contradicts one, that is a finding plus a plan amendment — never a
+  silent workaround.
+- **`decision-ref`** — plan-level. References an accepted decision by its
+  stable `NNN-topic-slug` handle from `design/decisions/` (per
+  `reference/decision-format.md`), with one line on what the plan takes from it
+  and where it bites. Doubles as a coverage check: a plan touching a
+  decision-governed area without a reference is a review signal — add the
+  reference, or record why the plan knowingly diverges.
+
+**Conflict rules — no conflict survives into execution.** A contradiction
+between a unit (or flow) and a referenced decision or an assumption is a
+**review blocker**; the plan does not proceed until resolved:
+
+- **Decision conflict** → challenge the decision: correct the plan to comply,
+  or amend/supersede the decision record in `design/decisions/` (the format's
+  `amended`/`superseded` states). Code follows the corrected decision.
+- **Assumption conflict** → verify the assumption against the code. Holds →
+  promote it to `design/decisions/` now, before execution (it stops being an
+  assumption the moment it survives a fight). Fails → the plan changes and the
+  assumption is dropped. Either way it no longer exists as an assumption when
+  units run.
+
+Assumptions are planning-phase only: written during analysis, challenged at
+review, promoted or discarded. Plan-local by default; at archive the promotion
+rule below applies, making the promotion queue explicit and reviewable.
+
 ### Standard head/tail units (new-issue implementations)
 
 For plans implementing a new issue (feature or bugfix from a report), embed
@@ -196,6 +255,7 @@ tracked:
 ## Large-task slicing plan — <task>
 Goal memory: ...
 Work units: one line per unit — unit-NNN — label → verify: <cmd>
+Extra information: kinds present, or "omitted" (conflict rules apply at review)
 Stop rule: ...
 Decisions flagged for veto: ...
 Approve as-is, or adjust units/order/stop rule.
@@ -241,7 +301,8 @@ the rules below describe the default when no manifest is declared.
 
 Done when: every unit is checked (plan path) or the change is committed with
 no new red relative to the base (small path); durable findings are promoted to project
-knowledge; `.todo/` is archived via `plan.py archive`; and the plan path notes
+knowledge — including any `assumption` entries that proved durable and
+load-bearing (via the findings-promotion path below); `.todo/` is archived via `plan.py archive`; and the plan path notes
 in findings any deviation between the estimate and what actually changed.
 After the user confirms the merge, `release` the workspace via the
 worktree-management skill (archive first — release refuses open plans).

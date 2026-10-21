@@ -71,6 +71,9 @@ step must mark the old record `superseded (by NNN)` or `amended (by NNN)`.
 Never leave two accepted decisions in conflict — stale decisions make review
 flag correct code.
 
+Plans reference decisions by this stable handle: the `NNN-topic-slug`
+filename (a plan-work `decision-ref` entry).
+
 ## Assignment
 
 The next available NNN is `max(existing IDs) + 1`. If no decisions exist, start

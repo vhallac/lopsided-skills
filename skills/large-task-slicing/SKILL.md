@@ -76,7 +76,12 @@ guard: |
 
 Goal memory and Bounds are set once at plan creation and do not change. Each
 work unit is a **contract** — `input` / `scope` / `output` / `verify` — so a
-fresh session can execute it without re-deriving context. The `verify` field is
+fresh session can execute it without re-deriving context. A unit bound to a
+plan-work **flow** (see plan-work's "Extra information") reads that flow as
+part of its inputs; the plan's **assumptions** are held as
+entitlement-without-re-verification — if execution contradicts one, record a
+finding and amend through the normal amendment path, never a silent workaround.
+The `verify` field is
 the unit's verification command.
 
 Unit state lives in the checkbox, derived from the unit's **event trail** —
