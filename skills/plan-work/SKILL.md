@@ -178,8 +178,7 @@ Kinds:
 - **`flow`** — binds to one unit (`kind: flow | unit-NNN`); that unit reads it
   as part of its **input**. Record flows for units whose approach a fresh
   executor should not re-derive. Write in domain vocabulary with result
-  binding; the section says nothing about naming (or not naming) endpoints —
-  below-sea-level comes from the structure, not from policing mentions.
+  binding.
 - **`assumption`** — plan-level. A design decision that should have been: an
   observation-backed pre-decision (e.g. "_ConfigService_ owns retry policy").
   Executors hold assumptions as entitlement-without-re-verification; if
