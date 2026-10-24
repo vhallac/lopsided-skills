@@ -16,5 +16,11 @@
     "skills": [
       "./skills"
     ]
+  },
+  "bin": {
+    "mailbox": "./mailbox/mailbox.mjs"
+  },
+  "scripts": {
+    "test": "node --test \"mailbox/test/*.test.mjs\""
   }
 }
