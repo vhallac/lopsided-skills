@@ -118,11 +118,24 @@ ask before planning. Otherwise proceed with assumptions stated.
 ## Step 2.5 — Identify behavioral claims and write test requirements (plan path)
 
 Before decomposition, extract the planned change's behavioral claims from the
-groomed issue only — never from code, so tests cannot freeze behavior instead
-of testing requirements. For bugfix plans, the input is the bug report's or
-review findings' corrected-behavior statements, graded the same way. For
-feature plans, read the main success steps, extensions, and business
-rules/BVRs; ignore implementation notes and developer-only commentary.
+groomed issue, or from the bug report's or review findings' corrected-behavior
+statements for a bugfix. For feature plans, read the main success steps,
+extensions, and business rules/BVRs; ignore implementation notes and
+developer-only commentary. Separately extract applicable behavioral constraints
+from the reviewed design and decision contracts named in the scope lock. Never
+derive requirements from code, so tests cannot freeze behavior instead of
+testing requirements. Include only constraints relevant to the change, and
+deduplicate behavior stated in multiple sources. If applicable sources conflict
+or a design's authority is unclear, surface the conflict and resolve it with the
+user before planning rather than choosing silently.
+
+Map each applicable design constraint to its source section and verifying
+check in the plan. When adding a durable test for a design-only constraint,
+name the design section at the test so the anchor survives the plan. A
+constraint without a groomed issue marker stays design-anchored; do not invent a
+story marker or emit a claim block that misstates its origin. If a constraint
+cannot be verified, report it and obtain an explicit decision rather than
+counting it as covered.
 
 Nice-to-have (bugfix): a bugfix plan may add or amend claim blocks for the
 corrected behavior. If implementing them proves difficult, defer via a
@@ -152,11 +165,13 @@ after the fact.
 
 ### Claim block format (emitted during implementation)
 
-During implementation, for each claim that has a test, emit a **claim block**
-as a comment in the source of the test that verifies the claim. Claims without
-a test are not emitted. The committed test file carrying the claim block is
-the claim's durable record (decision 010, as amended). The claim block is
-emitted **from the scratchpad** (`.todo/specs/<work-item>.feature`), which
+During implementation, for each claim from a groomed issue that has a test,
+emit a **claim block** as a comment in the source of the test that verifies the
+claim. Design-only constraints without a groomed issue marker use their design
+section as the verification anchor instead; do not fabricate a claim block.
+Claims without a test are not emitted. The committed test file carrying the
+claim block is the claim's durable record (decision 010, as amended). The claim
+block is emitted **from the scratchpad** (`.todo/specs/<work-item>.feature`), which
 stays a planning artifact — promotion at implementation time is the only path
 from scratchpad scenario to durable claim record.
 
@@ -238,9 +253,21 @@ Write each unit as a contract — it is the handoff to a fresh session:
 the committed test carrying it (emitted from the Step 2.5 scratchpad), a
 regression test
 (bugfix), a decision's named check, a corpus invariant, a golden or
-differential diff, or a canary run. Write a new test only when it locks a bug
-or is the named check of a decision. Never write one only so `verify` has
-something to run. If the honest check is inspection, say so and label it weak.
+differential diff, or a canary run. Write a new test only when it verifies a
+scoped behavioral claim or design constraint, locks a bug, or is the named
+check of a decision. Never write one only so `verify` has something to run. If
+the honest check is inspection, say so and label it weak.
+
+When a scoped contract spans multiple units or subsystem handoffs, assign an
+integration check after its contributing units are joined, either to the last
+contributor or to a separate unit. Name the source contract, the joined
+production boundary, and the verification command; use controlled doubles only
+for external dependencies, not in place of the handoff under test. Include the
+contract's relevant failure or isolation cases. Unit checks can complete their
+own slices, but do not establish the cross-slice contract without this check.
+If the check cannot run, report the contract as unverified and obtain an
+explicit decision; a passing unit suite is not a substitute. Single-unit work
+without a cross-slice contract does not need an extra integration unit.
 
 ### Extra information (optional)
 
