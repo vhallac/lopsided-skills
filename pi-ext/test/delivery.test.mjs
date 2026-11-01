@@ -254,7 +254,13 @@ test("createDeliveryHooks guards concurrent probes with a single seen-set", asyn
   // Two overlapping turn_end probes: exactly one continuation total.
   hooks.onTurnEnd(null);
   hooks.onTurnEnd(null);
-  await new Promise((resolve) => setTimeout(resolve, 400));
+  // Poll instead of a fixed sleep: the probe runs mailbox CLI children
+  // (list/show/consume), whose wall time under a loaded suite exceeds a
+  // fixed wait. Deadline is generous; the exactly-once assertion is unchanged.
+  const deadline = Date.now() + 5000;
+  while (sent.length === 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
   assert.equal(sent.length, 1);
   hooks.onSessionShutdown();
 });

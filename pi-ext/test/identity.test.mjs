@@ -242,3 +242,61 @@ test("recordReplacement appends and latestReplacement returns the newest entry p
   assert.equal((await latestReplacement(mailboxDir, "q")).from, "s3");
   assert.equal(await latestReplacement(mailboxDir, "nope"), null);
 });
+
+// R1.F4 regression: two concurrent bindPane calls (real child processes) must
+// not lose each other's write. Sequential tests cannot exercise the
+// interleaving (decision 013: verify concurrency only with real concurrent
+// processes).
+test("concurrent bindPane processes both survive (no lost write)", async () => {
+  const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-lock-"));
+  const mod = new URL("../agent-mailbox/identity.mjs", import.meta.url).pathname;
+  const script = (pane, session) => `
+    import { bindPane } from ${JSON.stringify(mod)};
+    await bindPane({ mailboxDir: ${JSON.stringify(mailboxDir)}, paneName: ${JSON.stringify(pane)}, sessionId: ${JSON.stringify(session)} });
+  `;
+  const { spawn } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const run = (code) => {
+    const child = spawn(process.execPath, ["-e", code]);
+    let err = "";
+    child.stderr.on("data", (d) => (err += d));
+    return promisify((cb) => child.on("exit", (c) => cb(null, c)))().then((c) => {
+      if (c !== 0) throw new Error(`child exited ${c}: ${err}`);
+    });
+  };
+  // 20 concurrent binders across distinct panes, all racing on one file.
+  await Promise.all(
+    Array.from({ length: 20 }, (_, i) => run(script(`pane-${i}`, `session-${i}`)))
+  );
+  const bindings = await loadBindings(mailboxDir);
+  for (let i = 0; i < 20; i++) {
+    assert.equal(bindings[`pane-${i}`]?.sessionId, `session-${i}`, `pane-${i} binding lost`);
+  }
+  assert.equal(Object.keys(bindings).length, 20);
+});
+
+// R1.F4 regression: concurrent recordReplacement processes must append every
+// journal entry — no lost appends, no clobbered file.
+test("concurrent recordReplacement processes all append (no lost entry)", async () => {
+  const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-rlock-"));
+  const mod = new URL("../agent-mailbox/rebind.mjs", import.meta.url).pathname;
+  const { spawn } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const run = (i) => {
+    const child = spawn(process.execPath, ["-e", `
+      import { recordReplacement } from ${JSON.stringify(mod)};
+      await recordReplacement({ mailboxDir: ${JSON.stringify(mailboxDir)}, paneName: "p", fromSessionId: "s${i}", toSessionId: "t${i}" });
+    `]);
+    let err = "";
+    child.stderr.on("data", (d) => (err += d));
+    return promisify((cb) => child.on("exit", (c) => cb(null, c)))().then((c) => {
+      if (c !== 0) throw new Error(`child exited ${c}: ${err}`);
+    });
+  };
+  await Promise.all(Array.from({ length: 20 }, (_, i) => run(i)));
+  const { loadReplacements } = await import("../agent-mailbox/rebind.mjs");
+  const entries = await loadReplacements(mailboxDir);
+  const froms = new Set(entries.map((e) => e.from));
+  for (let i = 0; i < 20; i++) assert.ok(froms.has(`s${i}`), `replacement s${i} lost`);
+  assert.equal(entries.length, 20);
+});

@@ -14,6 +14,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { runMailbox as defaultRunMailbox } from "./request.mjs";
+import { withStateLock } from "./extlock.mjs";
 
 /** Path of the session-replacement journal inside the mailbox dir namespace. */
 export function replacementsPath(mailboxDir) {
@@ -48,12 +49,16 @@ export async function recordReplacement({
   if (!paneName || typeof paneName !== "string") throw new TypeError("paneName required");
   if (!fromSessionId || typeof fromSessionId !== "string") throw new TypeError("fromSessionId required");
   if (!toSessionId || typeof toSessionId !== "string") throw new TypeError("toSessionId required");
-  const entries = await loadReplacements(mailboxDir);
-  entries.push({ paneName, from: fromSessionId, to: toSessionId, at: now });
   const file = replacementsPath(mailboxDir);
-  await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify(entries, null, 2) + "\n");
-  return entries[entries.length - 1];
+  // Read-modify-write is serialized under the ext-state lock (R1.F4):
+  // the journal is re-read UNDER the lock, never from a stale pre-lock copy.
+  return withStateLock(file, async () => {
+    const entries = await loadReplacements(mailboxDir);
+    entries.push({ paneName, from: fromSessionId, to: toSessionId, at: now });
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify(entries, null, 2) + "\n");
+    return entries[entries.length - 1];
+  });
 }
 
 /** Latest replacement recorded for a pane, or null when none was recorded. */

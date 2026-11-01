@@ -4,6 +4,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
+import { withStateLock } from "./extlock.mjs";
+
 /**
  * Path of the identity bindings file inside the mailbox dir namespace.
  * Lives alongside (not inside) the mailbox store's request files so the
@@ -31,12 +33,16 @@ export async function loadBindings(mailboxDir) {
 export async function bindPane({ mailboxDir, paneName, sessionId, now = new Date().toISOString() }) {
   if (!paneName || typeof paneName !== "string") throw new TypeError("paneName required");
   if (!sessionId || typeof sessionId !== "string") throw new TypeError("sessionId required");
-  const bindings = await loadBindings(mailboxDir);
-  bindings[paneName] = { sessionId, boundAt: now };
   const file = bindingsPath(mailboxDir);
-  await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify(bindings, null, 2) + "\n");
-  return bindings[paneName];
+  // Read-modify-write is serialized under the ext-state lock (R1.F4):
+  // state is re-read UNDER the lock, never from a stale pre-lock copy.
+  return withStateLock(file, async () => {
+    const bindings = await loadBindings(mailboxDir);
+    bindings[paneName] = { sessionId, boundAt: now };
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, JSON.stringify(bindings, null, 2) + "\n");
+    return bindings[paneName];
+  });
 }
 
 /** Resolve a pane name to its session identity, or null when unbound. */
