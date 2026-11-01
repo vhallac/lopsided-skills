@@ -56,12 +56,24 @@ export async function waitForOutcome({
   }
   if (!Number.isFinite(timeoutMs) || timeoutMs < 0) throw new WaitError("timeoutMs must be a non-negative number");
 
+  // R1.F7: a hung mailbox child is killed by runMailbox's child timeout and
+  // surfaces here as a timed-out RequestError — map it to a WaitError so the
+  // wait's error vocabulary stays intact. Other rejections propagate unchanged.
+  const run = async (args) => {
+    try {
+      return await runMailboxImpl({ mailboxDir, args });
+    } catch (err) {
+      if (err?.timedOut) throw new WaitError(err.message, { kind: "error" });
+      throw err;
+    }
+  };
+
   const deadline = nowImpl() + timeoutMs;
   for (;;) {
     // RC-3: a cancelled wait returns without a result and without consuming —
     // the request stays pending and a later wait still receives the outcome.
     if (signal?.aborted) return { status: "cancelled", requestId };
-    const shown = await runMailboxImpl({ mailboxDir, args: ["show", "--id", requestId] });
+    const shown = await run(["show", "--id", requestId]);
     if (shown.code !== 0) {
       // Exit 4 = unknown request (decision 012). Anything else is unexpected.
       const detail = (shown.stderr || shown.stdout).trim();
@@ -78,10 +90,9 @@ export async function waitForOutcome({
     if (record.reply) {
       // Outcome persisted (EXT-2a: may predate the wait). Consume delivers
       // it exactly once; a repeated consume is a mailbox-side no-op.
-      const consumed = await runMailboxImpl({
-        mailboxDir,
-        args: ["consume", "--id", requestId, "--requester", requesterIdentity],
-      });
+      const consumed = await run([
+        "consume", "--id", requestId, "--requester", requesterIdentity,
+      ]);
       if (consumed.code !== 0) {
         const detail = (consumed.stderr || consumed.stdout).trim();
         throw new WaitError(`mailbox consume failed (exit ${consumed.code}): ${detail}`);

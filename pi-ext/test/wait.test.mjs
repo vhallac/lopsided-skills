@@ -237,3 +237,41 @@ test("resolveRequesterIdentity fails fast for unbound panes", async () => {
     "sess-a",
   );
 });
+
+/**
+ * Claim block (unit-007, R1.F7):
+ *   claim id: mailbox-ext-R1.F7/2
+ *   claim: waitForOutcome maps a timed-out mailbox child to a WaitError
+ *   scenario: When the mailbox child invoked by the wait poll loop times out
+ *     Then waitForOutcome rejects with a WaitError (kind "error"), not a raw
+ *     RequestError, and other injected rejections still propagate unchanged
+ */
+test("R1.F7: waitForOutcome surfaces a timed-out child as WaitError; other rejections propagate", async () => {
+  const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-wait-"));
+
+  const timeoutErr = new Error("mailbox show timed out after 30000ms; the child process was killed");
+  timeoutErr.timedOut = true;
+  await assert.rejects(
+    waitForOutcome({
+      mailboxDir,
+      requestId: "req-1",
+      requesterIdentity: "sess-a",
+      runMailbox: async () => {
+        throw timeoutErr;
+      },
+    }),
+    (err) => err instanceof WaitError && err.kind === "error" && /timed out/.test(err.message),
+  );
+
+  await assert.rejects(
+    waitForOutcome({
+      mailboxDir,
+      requestId: "req-1",
+      requesterIdentity: "sess-a",
+      runMailbox: async () => {
+        throw new Error("boom");
+      },
+    }),
+    (err) => !(err instanceof WaitError) && /boom/.test(err.message),
+  );
+});

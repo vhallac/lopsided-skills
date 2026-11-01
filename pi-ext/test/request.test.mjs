@@ -10,7 +10,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { bindPane } from "../agent-mailbox/identity.mjs";
-import { dispatchRequest, runMailbox, MAILBOX_CLI } from "../agent-mailbox/request.mjs";
+import {
+  dispatchRequest,
+  runMailbox,
+  MAILBOX_CLI,
+  RequestError,
+  MAILBOX_CHILD_TIMEOUT_MS,
+} from "../agent-mailbox/request.mjs";
 
 /**
  * Claim block (unit-002):
@@ -119,4 +125,38 @@ test("runMailbox maps CLI failures to the documented exit vocabulary without thr
   assert.equal(missing.code, 4); // notFound
   assert.match(missing.stderr, /no request "req-nope"/);
   assert.equal(await readFile(MAILBOX_CLI, "utf8").then(() => true, () => false), true);
+});
+
+/**
+ * Claim block (unit-007, R1.F7):
+ *   claim id: mailbox-ext-R1.F7/1
+ *   claim: A hung mailbox child aborts the invocation with a typed timeout
+ *     error after the per-invocation timeout instead of blocking indefinitely
+ *   scenario: When the mailbox child process never exits
+ *     Then runMailbox kills the child after timeoutMs
+ *     And rejects with a RequestError tagged .timedOut
+ *     And waitForOutcome surfaces the same timeout as a WaitError
+ */
+test("R1.F7: hung mailbox child is killed and runMailbox rejects with a typed timeout error", async () => {
+  const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-req-"));
+  const start = Date.now();
+  await assert.rejects(
+    // node -e "<hang>" — args[0] becomes the -e script body: a child that
+    // never exits on its own (mailboxDir/env are irrelevant to it).
+    runMailbox({
+      mailboxDir,
+      args: ["setInterval(() => {}, 1e9)"],
+      cliPath: "-e",
+      timeoutMs: 200,
+    }),
+    (err) => err instanceof RequestError && err.timedOut === true && /timed out/.test(err.message),
+  );
+  assert.ok(Date.now() - start < 5000, "timeout must fire promptly, not block indefinitely");
+});
+
+test("R1.F7: default child timeout is 30s and a fast child resolves without the timer firing", async () => {
+  assert.equal(MAILBOX_CHILD_TIMEOUT_MS, 30_000);
+  const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-req-"));
+  const shown = await runMailbox({ mailboxDir, args: ["show", "--id", "req-nope"] });
+  assert.equal(shown.code, 4); // completes normally; timer cleared on close
 });
