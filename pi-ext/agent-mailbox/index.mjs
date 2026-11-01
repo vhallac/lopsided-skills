@@ -517,8 +517,17 @@ export default function agentMailboxExtension(pi, options = {}) {
     // old session's requests. Old replies stay undeliverable to the
     // replacement until an explicit agent_rebind (RC-4).
     const previous = (await loadBindings(mailboxDir))[paneName];
-    const sessionId =
-      options.sessionId ?? ctx?.sessionManager?.getSessionId?.() ?? paneName;
+    // R1.F5: no silent pane-name fallback. Without a real session id the
+    // binding would be wrong for every identity lookup that follows, so
+    // refuse loudly instead of binding to the pane name.
+    const sessionId = options.sessionId ?? ctx?.sessionManager?.getSessionId?.();
+    if (!sessionId) {
+      throw new Error(
+        `agent-mailbox: cannot bind pane "${paneName}": no session id available ` +
+        "(options.sessionId and ctx.sessionManager.getSessionId both missing); " +
+        "refusing to fall back to the pane name",
+      );
+    }
     if (previous && previous.sessionId && previous.sessionId !== sessionId) {
       await recordReplacement({
         mailboxDir,

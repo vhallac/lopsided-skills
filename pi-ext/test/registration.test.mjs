@@ -114,6 +114,18 @@ test("session_start binds the pane identity under the mailbox dir namespace", as
   assert.equal(binding.sessionId, "sess-1");
 });
 
+test("session_start without an obtainable session id refuses to bind (R1.F5)", async () => {
+  const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-"));
+  const pi = fakePi();
+  agentMailboxExtension(pi, { mailboxDir, paneName: "worker-a" });
+  await assert.rejects(
+    () => pi.handlers.session_start({}, {}),
+    /refusing to fall back to the pane name/,
+  );
+  const { resolvePane } = await import("../agent-mailbox/identity.mjs");
+  assert.equal(await resolvePane({ mailboxDir, paneName: "worker-a" }), null);
+});
+
 test("anonymous pane (no AGENT_PANE) skips identity binding", async () => {
   const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-"));
   const pi = fakePi();
