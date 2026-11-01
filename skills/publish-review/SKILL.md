@@ -27,7 +27,7 @@ Check before anything else:
 
 - frontmatter `schema: review-report/1`;
 - every `F<n>`/`U<n>` block in the body appears in the frontmatter with the same ID, severity, likelihood and summary, and vice versa;
-- every finding block has all seven fields.
+- every finding block has all eight fields.
 
 If any check fails, report what is wrong and stop.
 
