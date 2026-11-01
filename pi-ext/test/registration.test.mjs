@@ -61,6 +61,42 @@ test("agent_request execute surfaces an error result when the mailbox dir is mis
   assert.match(result.content[0].text, /^agent_request failed:/);
 });
 
+// R1.F2: anonymous requester fail-fast — agent_request and agent_wait both
+// reject an unbound pane instead of proceeding as "anonymous".
+test("agent_request execute fails fast for a pane with no bound identity", async () => {
+  const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-reg-"));
+  const tool = createTools({ mailboxDir, paneName: "unbound-pane" }).find(
+    (t) => t.name === "agent_request",
+  );
+  const result = await tool.execute("tc-r1f2a", { worker: "w", instruction: "i" });
+  assert.equal(result.details.error, true);
+  assert.match(
+    result.content[0].text,
+    /pane "unbound-pane" has no bound session identity/,
+  );
+});
+
+test("agent_request execute fails fast when no pane name is set", async () => {
+  const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-reg-"));
+  const tool = createTools({ mailboxDir }).find((t) => t.name === "agent_request");
+  const result = await tool.execute("tc-r1f2b", { worker: "w", instruction: "i" });
+  assert.equal(result.details.error, true);
+  assert.match(result.content[0].text, /no pane name \(AGENT_PANE\) is set/);
+});
+
+test("agent_wait execute fails fast for a pane with no bound identity", async () => {
+  const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-reg-"));
+  const tool = createTools({ mailboxDir, paneName: "unbound-pane" }).find(
+    (t) => t.name === "agent_wait",
+  );
+  const result = await tool.execute("tc-r1f2c", { requestId: "req-1" });
+  assert.equal(result.details.error, true);
+  assert.match(
+    result.content[0].text,
+    /pane "unbound-pane" has no bound session identity/,
+  );
+});
+
 test("agent_wait execute surfaces an error result when the mailbox dir is missing", async () => {
   const tool = createTools().find((t) => t.name === "agent_wait");
   const result = await tool.execute("tc-3", { requestId: "req-1" });

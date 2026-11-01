@@ -207,12 +207,19 @@ test("wait on an unknown requestId surfaces the mailbox not-found rejection", as
   );
 });
 
-test("resolveRequesterIdentity falls back to anonymous for unbound panes", async () => {
+// R1.F2: anonymous fail-fast — no pane name, or a pane without a bound
+// session identity, rejects instead of proceeding as "anonymous".
+test("resolveRequesterIdentity fails fast for unbound panes", async () => {
   const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-wait-"));
-  assert.equal(await resolveRequesterIdentity({ mailboxDir, paneName: null }), "anonymous");
-  assert.equal(
-    await resolveRequesterIdentity({ mailboxDir, paneName: "nobody" }),
-    "anonymous",
+  await assert.rejects(
+    resolveRequesterIdentity({ mailboxDir, paneName: null }),
+    (err) => err instanceof WaitError && /no pane name/.test(err.message),
+  );
+  await assert.rejects(
+    resolveRequesterIdentity({ mailboxDir, paneName: "nobody" }),
+    (err) =>
+      err instanceof WaitError &&
+      /pane "nobody" has no bound session identity/.test(err.message),
   );
   await bindPane({ mailboxDir, paneName: "pane-a", sessionId: "sess-a" });
   assert.equal(

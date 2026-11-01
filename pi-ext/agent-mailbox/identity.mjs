@@ -48,7 +48,7 @@ export async function resolvePane({ mailboxDir, paneName }) {
 /**
  * Best-effort pane name for this extension instance. Overridable for tests.
  * herdr sets AGENT_PANE per pane; absent that, the pane is anonymous and
- * identity binding is skipped (requester identity falls back to "anonymous").
+ * identity binding is skipped (requester tools fail fast on unbound panes).
  */
 export function resolvePaneName({ env = process.env } = {}) {
   return env.AGENT_PANE || null;

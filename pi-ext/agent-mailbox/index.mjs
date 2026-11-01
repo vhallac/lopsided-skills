@@ -5,7 +5,7 @@
 // shared) is invoked as a subprocess.
 import { resolvePaneName, bindPane, resolvePane, loadBindings } from "./identity.mjs";
 import { recordReplacement, rebindPaneRequests } from "./rebind.mjs";
-import { dispatchRequest } from "./request.mjs";
+import { dispatchRequest, RequestError } from "./request.mjs";
 import { replyOutcome } from "./reply.mjs";
 import { waitForOutcome, resolveRequesterIdentity, WaitError } from "./wait.mjs";
 import { createDeliveryHooks } from "./delivery.mjs";
@@ -48,8 +48,9 @@ export { waitForOutcome, WaitError };
 
 /**
  * Real agent_request execute (unit-002). Resolves the requester's own
- * session identity from the bindings (pane bound at session_start), falling
- * back to "anonymous" for anonymous panes, then dispatches via the mailbox.
+ * session identity from the bindings (pane bound at session_start) and
+ * dispatches via the mailbox. Fail-fast (decision 015): an unbound pane
+ * rejects the request instead of proceeding as an anonymous requester.
  */
 function requestExecute(options) {
   return async (_toolCallId, params) => {
@@ -58,8 +59,18 @@ function requestExecute(options) {
       let requesterIdentity = options.requesterIdentity;
       if (!requesterIdentity && mailboxDir) {
         const paneName = options.paneName ?? resolvePaneName(options);
-        const own = paneName ? await resolvePane({ mailboxDir, paneName }) : null;
-        requesterIdentity = own?.sessionId ?? "anonymous";
+        if (!paneName) {
+          throw new RequestError(
+            "requester identity required: no pane name (AGENT_PANE) is set for this pane; the agent must run in a pane that has started before it can request",
+          );
+        }
+        const own = await resolvePane({ mailboxDir, paneName });
+        if (!own || !own.sessionId) {
+          throw new RequestError(
+            `requester identity required: pane "${paneName}" has no bound session identity; the agent must run in a pane that has started (AGENT_PANE set) before it can request`,
+          );
+        }
+        requesterIdentity = own.sessionId;
       }
       const { requestId, worker } = await dispatchRequest({
         mailboxDir,

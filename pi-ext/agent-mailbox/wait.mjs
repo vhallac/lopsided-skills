@@ -104,11 +104,21 @@ export async function waitForOutcome({
 
 /**
  * Resolve the waiting pane's own requester identity the same way
- * agent_request does: bound session identity, else explicit "anonymous".
+ * agent_request does: from the pane's bound session identity. Fail-fast
+ * (decision 015) when the pane is unbound — no silent "anonymous" fallback.
  */
 export async function resolveRequesterIdentity({ mailboxDir, paneName }) {
   if (!mailboxDir) throw new WaitError("mailboxDir required");
-  if (!paneName) return "anonymous";
+  if (!paneName) {
+    throw new WaitError(
+      "requester identity required: no pane name (AGENT_PANE) is set for this pane; the agent must run in a pane that has started before it can wait",
+    );
+  }
   const own = await resolvePane({ mailboxDir, paneName });
-  return own?.sessionId ?? "anonymous";
+  if (!own || !own.sessionId) {
+    throw new WaitError(
+      `requester identity required: pane "${paneName}" has no bound session identity; the agent must run in a pane that has started (AGENT_PANE set) before it can wait`,
+    );
+  }
+  return own.sessionId;
 }
