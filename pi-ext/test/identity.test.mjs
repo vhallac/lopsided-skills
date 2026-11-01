@@ -243,6 +243,58 @@ test("recordReplacement appends and latestReplacement returns the newest entry p
   assert.equal(await latestReplacement(mailboxDir, "nope"), null);
 });
 
+// R1.F6 regression: after two rapid restarts (S1 → S2 → S3), a single
+// agent_rebind must make requests registered by BOTH S1 and S2 deliverable
+// to S3 — the rebind walks the full replacement chain, not just the latest
+// replacement.
+test("agent_rebind after double restart rebinds the full replacement chain (S1 and S2 requests)", async () => {
+  const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-rebind-"));
+  await bindPane({ mailboxDir, paneName: "driver-a", sessionId: "sess-1" });
+  await bindPane({ mailboxDir, paneName: "worker-b", sessionId: "sess-worker-b" });
+  // S1 registers a request; the worker replies before any restart.
+  const { requestId: r1 } = await dispatchRequest({
+    mailboxDir, worker: "worker-b", instruction: "first", requesterIdentity: "sess-1",
+  });
+  await replyOutcome({
+    mailboxDir, requestId: r1, status: "DONE", report: "from S1 era", workerPane: "worker-b",
+  });
+
+  // Two rapid restarts: S2 takes over the pane, registers its own request
+  // and gets a reply; then S3 takes over again.
+  let pi = fakePi();
+  agentMailboxExtension(pi, { mailboxDir, paneName: "driver-a", sessionId: "sess-2" });
+  await pi.handlers.session_start({}, {});
+  const { requestId: r2 } = await dispatchRequest({
+    mailboxDir, worker: "worker-b", instruction: "second", requesterIdentity: "sess-2",
+  });
+  await replyOutcome({
+    mailboxDir, requestId: r2, status: "DONE", report: "from S2 era", workerPane: "worker-b",
+  });
+
+  pi = fakePi();
+  agentMailboxExtension(pi, { mailboxDir, paneName: "driver-a", sessionId: "sess-3" });
+  await pi.handlers.session_start({}, {});
+
+  // Before the rebind, neither era's reply is deliverable to sess-3.
+  let probe = await probeDeliveries({ mailboxDir, requesterIdentity: "sess-3" });
+  assert.deepEqual(probe.delivered, []);
+
+  // One explicit rebind under the replacement (sess-3) walks the whole chain.
+  const tool = pi.registered.find((t) => t.name === "agent_rebind");
+  const result = await tool.execute("tc-chain", { pane: "driver-a" });
+  assert.equal(result.details.error, undefined);
+  assert.deepEqual(result.details.rebound.sort(), [r1, r2].sort());
+
+  // Both eras' pending replies are now deliverable to sess-3.
+  const sent = [];
+  probe = await probeDeliveries({
+    mailboxDir, requesterIdentity: "sess-3",
+    sendMessage: (message, opts) => sent.push({ message, opts }),
+  });
+  assert.deepEqual(probe.delivered.map((d) => d.requestId).sort(), [r1, r2].sort());
+  assert.equal(sent.length, 2);
+});
+
 // R1.F4 regression: two concurrent bindPane calls (real child processes) must
 // not lose each other's write. Sequential tests cannot exercise the
 // interleaving (decision 013: verify concurrency only with real concurrent

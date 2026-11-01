@@ -122,12 +122,16 @@ export async function rebindRequester({
 }
 
 /**
- * Rebind a replacement pane's pending requests: resolves the latest recorded
- * replacement for paneName and rebinds the old session's undelivered requests
- * to toIdentity (default: the replacement session the replacement recorded).
- * Returns { rebound, replacement } or null when no replacement was recorded
- * for the pane (nothing to rebind — also the safe answer for a pane that was
- * never rebound).
+ * Rebind a replacement pane's pending requests: walks the FULL replacement
+ * chain recorded for paneName — not just the latest replacement — and rebinds
+ * the undelivered requests of every prior from-identity reachable in the
+ * journal to toIdentity (default: the replacement session the latest
+ * replacement recorded). This covers double rapid restarts (S1 → S2 → S3):
+ * requests registered by S1 must become deliverable after the rebind, not
+ * only those registered by S2. Returns { rebound, replacement } (replacement
+ * = the latest entry, with the effective target) or null when no replacement
+ * was recorded for the pane (nothing to rebind — also the safe answer for a
+ * pane that was never rebound).
  */
 export async function rebindPaneRequests({
   mailboxDir,
@@ -135,14 +139,24 @@ export async function rebindPaneRequests({
   toIdentity,
   runMailbox: runMailboxImpl = defaultRunMailbox,
 }) {
-  const replacement = await latestReplacement(mailboxDir, paneName);
-  if (!replacement) return null;
+  const entries = (await loadReplacements(mailboxDir)).filter(
+    (entry) => entry.paneName === paneName
+  );
+  if (entries.length === 0) return null;
+  const replacement = entries[entries.length - 1];
   const target = toIdentity ?? replacement.to;
-  const { rebound } = await rebindRequester({
-    mailboxDir,
-    fromIdentity: replacement.from,
-    toIdentity: target,
-    runMailbox: runMailboxImpl,
-  });
+  // Every prior from-identity reachable for this pane, journal order
+  // (oldest first) with duplicates dropped.
+  const fromIdentities = [...new Set(entries.map((entry) => entry.from))];
+  const rebound = [];
+  for (const fromIdentity of fromIdentities) {
+    const result = await rebindRequester({
+      mailboxDir,
+      fromIdentity,
+      toIdentity: target,
+      runMailbox: runMailboxImpl,
+    });
+    rebound.push(...result.rebound);
+  }
   return { rebound, replacement: { ...replacement, to: target } };
 }
