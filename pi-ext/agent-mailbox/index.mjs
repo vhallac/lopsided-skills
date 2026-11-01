@@ -10,8 +10,25 @@ import { replyOutcome } from "./reply.mjs";
 import { waitForOutcome, resolveRequesterIdentity, WaitError } from "./wait.mjs";
 import { createDeliveryHooks } from "./delivery.mjs";
 import { settlePendingOnShutdown } from "./settle.mjs";
+import {
+  registerActiveWait,
+  unregisterActiveWait,
+  cancelWait,
+  listRecoverable,
+  pauseDelivery,
+  resumeDelivery,
+} from "./recovery.mjs";
 
-export const TOOL_NAMES = ["agent_request", "agent_wait", "agent_reply", "agent_rebind"];
+export const TOOL_NAMES = [
+  "agent_request",
+  "agent_wait",
+  "agent_reply",
+  "agent_rebind",
+  "agent_list",
+  "agent_pause",
+  "agent_resume",
+  "agent_cancel",
+];
 
 function requestErrorResult(message) {
   return {
@@ -111,12 +128,34 @@ function waitExecute(options) {
       const requesterIdentity =
         options.requesterIdentity ??
         (await resolveRequesterIdentity({ mailboxDir, paneName }));
-      const result = await waitForOutcome({
-        mailboxDir,
-        requestId: params.requestId,
-        requesterIdentity,
-        timeoutMs: params.timeoutMs,
-      });
+      // RC-3: the wait is cancellable in-process. The AbortController is
+      // registered so agent_cancel can abort the blocked poll loop; the
+      // request itself is never touched.
+      const controller = new AbortController();
+      registerActiveWait(params.requestId, controller);
+      let result;
+      try {
+        result = await waitForOutcome({
+          mailboxDir,
+          requestId: params.requestId,
+          requesterIdentity,
+          timeoutMs: params.timeoutMs,
+          signal: controller.signal,
+        });
+      } finally {
+        unregisterActiveWait(params.requestId, controller);
+      }
+      if (result.status === "cancelled") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `wait cancelled for request ${params.requestId}: the wait returned without a result and nothing was consumed; the request stays pending and can be waited on later.`,
+            },
+          ],
+          details: { tool: "agent_wait", requestId: params.requestId, status: "cancelled" },
+        };
+      }
       if (result.status === "timeout") {
         return {
           content: [
@@ -204,6 +243,117 @@ function rebindExecute(options) {
 }
 
 /**
+ * Recovery controls (unit-008, RC-1..RC-3). Shared execute factory for the
+ * inspect/pause/resume/cancel tools: mailbox subprocess for list/pause/
+ * resume, in-process abort for cancelling a blocked wait (never `mailbox
+ * cancel` — that would destroy the request's reply obligation).
+ */
+function recoveryExecute(options, { tool, run }) {
+  return async (_toolCallId, params) => {
+    const mailboxDir = options.mailboxDir ?? process.env.MAILBOX_DIR;
+    try {
+      return await run({ mailboxDir, params });
+    } catch (err) {
+      const message = err?.message ?? String(err);
+      return {
+        content: [{ type: "text", text: `${tool} failed: ${message}` }],
+        details: { tool, error: true, reason: message },
+      };
+    }
+  };
+}
+
+function listExecute(options) {
+  return recoveryExecute(options, {
+    tool: "agent_list",
+    run: async ({ mailboxDir, params }) => {
+      const records = await listRecoverable({ mailboxDir, pendingOnly: params.pendingOnly === true });
+      const lines = records.map(
+        (r) =>
+          `${r.requestId}\t${r.state}\t${r.hasReply ? `reply:${r.replyStatus}` : "no-reply"}` +
+          `\t${r.delivered ? "delivered" : "undelivered"}\t${r.paused ? "paused" : "active"}`,
+      );
+      return {
+        content: [
+          {
+            type: "text",
+            text: lines.length
+              ? `requestId\tstate\treply\tdelivery\tpause\n${lines.join("\n")}`
+              : "no requests in the mailbox",
+          },
+        ],
+        details: { tool: "agent_list", records },
+      };
+    },
+  });
+}
+
+function pauseExecute(options) {
+  return recoveryExecute(options, {
+    tool: "agent_pause",
+    run: async ({ mailboxDir, params }) => {
+      const { message } = await pauseDelivery({ mailboxDir, requestId: params.requestId });
+      return {
+        content: [
+          {
+            type: "text",
+            text: `${message}. Replies for this request are now held as inspectable state and will not be delivered until resumed.`,
+          },
+        ],
+        details: { tool: "agent_pause", requestId: params.requestId, paused: true },
+      };
+    },
+  });
+}
+
+function resumeExecute(options) {
+  return recoveryExecute(options, {
+    tool: "agent_resume",
+    run: async ({ mailboxDir, params }) => {
+      const { message } = await resumeDelivery({ mailboxDir, requestId: params.requestId });
+      return {
+        content: [
+          {
+            type: "text",
+            text: `${message}. Any held reply delivers on the next wait or delivery probe.`,
+          },
+        ],
+        details: { tool: "agent_resume", requestId: params.requestId, paused: false },
+      };
+    },
+  });
+}
+
+function cancelExecute(options) {
+  return recoveryExecute(options, {
+    tool: "agent_cancel",
+    run: async ({ params }) => {
+      const { cancelled, hadActiveWait } = cancelWait(params.requestId);
+      if (!hadActiveWait) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `no blocked agent_wait for request ${params.requestId} in this session; nothing to cancel. The request itself is untouched and stays pending.`,
+            },
+          ],
+          details: { tool: "agent_cancel", requestId: params.requestId, cancelled: false },
+        };
+      }
+      return {
+        content: [
+          {
+            type: "text",
+            text: `cancelled the blocked wait for request ${params.requestId}: it returns without a result. The request stays pending and can be waited on later.`,
+          },
+        ],
+        details: { tool: "agent_cancel", requestId: params.requestId, cancelled: true },
+      };
+    },
+  });
+}
+
+/**
  * Build the tool definitions. Exported so unit tests can assert
  * registration without running inside pi.
  */
@@ -273,7 +423,66 @@ export function createTools(options = {}) {
       },
       execute: rebindExecute(options),
     },
-  ];
+  {
+    name: "agent_list",
+    label: "Agent List",
+    description:
+      "Inspect recovery state (RC-1): list mailbox requests with pending/delivery state, including pending requests and undelivered replies.",
+    parameters: {
+      type: "object",
+      properties: {
+        pendingOnly: {
+          type: "boolean",
+          description: "Restrict to undelivered, non-cancelled requests (default: list everything)",
+        },
+      },
+      required: [],
+    },
+    execute: listExecute(options),
+  },
+  {
+    name: "agent_pause",
+    label: "Agent Pause",
+    description:
+      "Pause automatic delivery for a requestId (RC-2): replies become inspectable state and are not delivered until resumed.",
+    parameters: {
+      type: "object",
+      properties: {
+        requestId: { type: "string", description: "Request id whose delivery to pause" },
+      },
+      required: ["requestId"],
+    },
+    execute: pauseExecute(options),
+  },
+  {
+    name: "agent_resume",
+    label: "Agent Resume",
+    description:
+      "Resume automatic delivery for a requestId (RC-2): held replies deliver on the next wait or delivery probe.",
+    parameters: {
+      type: "object",
+      properties: {
+        requestId: { type: "string", description: "Request id whose delivery to resume" },
+      },
+      required: ["requestId"],
+    },
+    execute: resumeExecute(options),
+  },
+  {
+    name: "agent_cancel",
+    label: "Agent Cancel",
+    description:
+      "Cancel a blocked agent_wait for a requestId (RC-3): the wait returns without a result; the request itself stays pending and can be waited on later. This does NOT cancel the request.",
+    parameters: {
+      type: "object",
+      properties: {
+        requestId: { type: "string", description: "Request id whose blocked wait to cancel" },
+      },
+      required: ["requestId"],
+    },
+    execute: cancelExecute(options),
+  },
+];
 }
 
 /**

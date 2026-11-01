@@ -40,6 +40,7 @@ export async function waitForOutcome({
   requesterIdentity,
   timeoutMs = 30_000,
   pollMs = 250,
+  signal, // optional AbortSignal: aborting the wait cancels the WAIT (RC-3), never the request
   runMailbox: runMailboxImpl = defaultRunMailbox,
   sleepImpl = sleep,
   nowImpl = () => Date.now(),
@@ -57,6 +58,9 @@ export async function waitForOutcome({
 
   const deadline = nowImpl() + timeoutMs;
   for (;;) {
+    // RC-3: a cancelled wait returns without a result and without consuming —
+    // the request stays pending and a later wait still receives the outcome.
+    if (signal?.aborted) return { status: "cancelled", requestId };
     const shown = await runMailboxImpl({ mailboxDir, args: ["show", "--id", requestId] });
     if (shown.code !== 0) {
       // Exit 4 = unknown request (decision 012). Anything else is unexpected.

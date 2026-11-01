@@ -22,14 +22,23 @@ function fakePi() {
   };
 }
 
-test("registers exactly the agent tools (request/wait/reply/rebind)", () => {
+test("registers exactly the agent tools (request/wait/reply/rebind/recovery)", () => {
   const pi = fakePi();
   agentMailboxExtension(pi, {});
   assert.deepEqual(
     pi.registered.map((t) => t.name),
     TOOL_NAMES
   );
-  assert.deepEqual(TOOL_NAMES, ["agent_request", "agent_wait", "agent_reply", "agent_rebind"]);
+  assert.deepEqual(TOOL_NAMES, [
+    "agent_request",
+    "agent_wait",
+    "agent_reply",
+    "agent_rebind",
+    "agent_list",
+    "agent_pause",
+    "agent_resume",
+    "agent_cancel",
+  ]);
 });
 
 test("each tool declares parameters and an execute function", () => {
