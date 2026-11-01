@@ -26,7 +26,7 @@ The report file written by review-change (`<temp dir>/review-<label>-r<round>.md
 Check before anything else:
 
 - frontmatter `schema: review-report/1`;
-- every `F<n>`/`U<n>` block in the body appears in the frontmatter with the same ID, severity and summary, and vice versa;
+- every `F<n>`/`U<n>` block in the body appears in the frontmatter with the same ID, severity, likelihood and summary, and vice versa;
 - every finding block has all seven fields.
 
 If any check fails, report what is wrong and stop.
