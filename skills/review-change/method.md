@@ -156,6 +156,24 @@ For every changed input path (HTTP, CLI arg, env var, file, queue message, API p
 
 Treat "unvalidated sink reachable" as a security claim subject to the same counterexample construction as any other claim.
 
+## Code quality
+
+After the evidence and falsification stages, run the code quality stage over the diff. Two sub-stages:
+
+**a. Documented linter/static-analysis run.** If the reviewed project documents a linter or static-analysis stage in its agent-facing docs (AGENTS.md or equivalent), run it in the review worktree under the existing execution rules, and assess its output into findings like any other evidence: each confirmed problem becomes a normal finding with an anchor, trigger, and the full field set. IF the project documents no such stage; THEN record the sub-stage as not applicable in the **Verification assessment** and continue at sub-stage b. IF the documented tool cannot run in the review environment (missing dependencies, no network, no secrets); THEN record it as **unverified** — the existing execution rule for environment-blocked runs — not a finding against the change.
+
+**b. Itemized quality checklist.** Apply the checklist below to the diff and attempt to construct breakage scenarios the extracted claims do not state. A checklist item yields a finding only when a trigger scenario can be constructed; an item with no constructable trigger is not a finding — record it as checked-and-clear in the **Verification assessment** (the do-not-invent rule).
+
+- error handling: ignored or swallowed errors, missing cleanup/rollback on failure, partially applied changes
+- resources: leaked handles, unbounded growth, missing timeouts or limits
+- boundaries: unchecked assumptions about input size/shape, paths, cwd, environment, empty values; off-by-one
+- structure: copy-paste that will drift, dead or unreachable code, hidden side effects, misleading names
+- failure visibility: silent failure, logs or messages that misstate what happened
+- tests: assertions that cannot fail, tests coupled to implementation details, missing failure-path coverage
+- complexity: branches and conditions no claim or design decision justifies
+
+Quality-stage findings enter the severity ladder and verdict mapping normally — they are findings with anchors and triggers like any other.
+
 ## Review questions
 
 ### Code and change quality
@@ -212,6 +230,17 @@ Give each finding a stable ID — `F1`, `F2`, … — assigned in output order (
 
 An executed probe proves a trigger exists, not that it is reachable. State in **Trigger** whether the probe used only the supported surface.
 
+### Likelihood
+
+Every finding also carries a **likelihood** grade for its trigger scenario — how probable the trigger is under the current implementation. Likelihood is an independent axis: it does not shift or cap severity. The reachability rule above answers a different question (is the trigger on the supported surface) and is unchanged; a trigger may be reachable yet `very-unlikely`.
+
+- `probable` — the trigger arises in normal operation of the supported surface;
+- `unlikely` — the trigger requires unusual but realistic conditions;
+- `very-unlikely` — the trigger requires contrived conditions or coincidences;
+- `impossible (under current implementation)` — no constructable path produces the trigger.
+
+A finding graded `impossible` is recorded, not raised as a defect: cap its severity at **Observation** and exclude it from the verdict mapping — the same role as the cross-model meta-finding and the hypothetical-concern rule. A plausible triggering path is required to raise it; an `impossible` finding documents that none exists.
+
 Each finding must contain:
 
 - **Anchor**: changed code or contract responsible for bringing the issue into scope;
@@ -220,6 +249,7 @@ Each finding must contain:
 - **Trigger**: concrete minimal scenario that demonstrates or risks the problem;
 - **Consequence**;
 - **Evidence**;
+- **Likelihood** — the trigger's grade per [Likelihood](#likelihood);
 - **Recommended correction**.
 
 Do not raise hypothetical concerns without a plausible triggering path.

@@ -30,7 +30,7 @@ Reviewer verdict: **approve with follow-ups**
 ### Details
 
 #### F1 — Minor: Render-time Kahn fallback drops providers silently
-…all seven fields, verbatim from the report…
+…all eight fields, verbatim from the report…
 
 <details><summary>F2 — Minor: …</summary>
 

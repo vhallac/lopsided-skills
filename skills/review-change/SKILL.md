@@ -31,7 +31,7 @@ Scripts live at `<skill-directory>/scripts/`; never guess a fixed absolute path.
 4. **Earlier rounds** — `rounds.md`: fetch markers on every channel, fix this review's round number, collect decisions, find the delta since the last round.
 5. **Check out** — `git fetch`, then `scripts/worktree.sh create <repo> <label> <commit>`. Everything after this happens inside the review worktree.
 6. **Gather evidence** (below and the target file).
-7. **Falsify** — `method.md`, giving the delta since the last round the first pass.
+7. **Falsify and check code quality** — `method.md`: the falsification procedure, giving the delta since the last round the first pass, then the code quality stage (documented linter/static-analysis run plus the itemized quality checklist) and the likelihood grade for every finding.
 8. **Grade and decide** — severities with the reachability rule, then the verdict from the mapping table in `method.md`. In the first review, claim coverage blocks a passing verdict until every new claim is mapped or waived (`method.md`, *Verdict*).
 9. **Write the report file** — `report-schema.md`.
 10. **Clean up** — `scripts/worktree.sh remove <repo> <path>`, under every outcome including errors. Confirm it reports removed.
