@@ -167,3 +167,47 @@ test("settle sweep with no bound identity or empty mailbox settles nothing", asy
   const noDir = await settlePendingOnShutdown({ mailboxDir: "", workerPane: "worker-b" });
   assert.deepEqual(noDir.settled, []);
 });
+
+/**
+ * Regression test (R1.F1): a cancelled record must not abort the settle
+ * sweep. Cancel is terminal (decision 014) — it binds no outcome, so the
+ * sweep skips it without attempting a reply and continues settling the
+ * remaining unreplied requests owned by this worker.
+ */
+test("R1.F1: settle sweep skips cancelled records and still settles later unreplied requests", async () => {
+  const { mailboxDir, requestId } = await setup();
+
+  // A second owned request that gets cancelled before the sweep.
+  const { requestId: cancelledId } = await dispatchRequest({
+    mailboxDir,
+    worker: "worker-b",
+    instruction: "cancelled before shutdown",
+    requesterIdentity: "sess-requester-a",
+  });
+  const cancel = await runMailbox({ mailboxDir, args: ["cancel", "--id", cancelledId] });
+  assert.equal(cancel.code, 0, `cancel should succeed: ${cancel.stderr}`);
+
+  const { settled, skipped } = await settlePendingOnShutdown({
+    mailboxDir,
+    workerPane: "worker-b",
+  });
+
+  // The sweep did not abort: the later unreplied request is settled and the
+  // cancelled record is reported as skipped.
+  assert.deepEqual(settled, [requestId]);
+  assert.deepEqual(skipped, { cancelled: 1, failed: 0 });
+
+  // The cancelled record stays terminal: no reply was forced onto it.
+  const shown = JSON.parse(
+    (await runMailbox({ mailboxDir, args: ["show", "--id", cancelledId] })).stdout,
+  );
+  assert.equal(shown.state, "cancelled");
+  assert.equal(shown.reply, null);
+
+  // The non-cancelled request got the stopped-without-result outcome.
+  const settledShown = JSON.parse(
+    (await runMailbox({ mailboxDir, args: ["show", "--id", requestId] })).stdout,
+  );
+  assert.equal(settledShown.reply.status, "FAILED");
+  assert.match(settledShown.reply.report, /stopped without a result/);
+});

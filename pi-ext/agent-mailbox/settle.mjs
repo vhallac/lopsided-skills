@@ -27,8 +27,15 @@ export const STOPPED_REPORT =
  *   agent_reply; never DONE), so all mailbox semantics apply unchanged.
  * - Requests already replied, cancelled, or owned by another worker are
  *   untouched; a second sweep is a no-op (reply now persisted).
+ * - A cancelled record (state "cancelled", decision 014 terminal) is skipped
+ *   without attempting a reply: it binds no outcome. A per-record reply
+ *   rejection never aborts the sweep — the sweep continues with the
+ *   remaining records and the failure surfaces in the returned summary.
  * `workerIdentity` overrides the binding lookup (tests / known identity).
- * Returns { settled: [requestId, ...] }.
+ * Returns { settled: [requestId, ...], skipped: { cancelled, failed } } where
+ * `skipped.cancelled` counts records skipped because they were already
+ * cancelled and `skipped.failed` counts records whose reply was rejected
+ * (the request stays pending and inspectable).
  */
 export async function settlePendingOnShutdown({
   mailboxDir,
@@ -56,6 +63,7 @@ export async function settlePendingOnShutdown({
     .filter(Boolean);
 
   const settled = [];
+  const skipped = { cancelled: 0, failed: 0 };
   for (const requestId of ids) {
     const shown = await runMailboxImpl({ mailboxDir, args: ["show", "--id", requestId] });
     if (shown.code !== 0) continue;
@@ -67,18 +75,30 @@ export async function settlePendingOnShutdown({
     }
     if (record.worker !== identity) continue;
     if (record.reply) continue;
+    if (record.state === "cancelled") {
+      // Decision 014: cancel is terminal and binds no outcome — nothing to
+      // settle. Skip without attempting a reply (R1.F1).
+      skipped.cancelled += 1;
+      continue;
+    }
     // Ordinary reply path: mailbox validates the vocabulary and the worker
     // identity (EXT-3b) and persists the outcome; the request stays fully
-    // inspectable (show) and deliverable (consume) afterwards.
-    await replyOutcome({
-      mailboxDir,
-      requestId,
-      status,
-      report,
-      workerIdentity: identity,
-      runMailbox: runMailboxImpl,
-    });
-    settled.push(requestId);
+    // inspectable (show) and deliverable (consume) afterwards. A per-record
+    // rejection (e.g. a race with a concurrent cancel) is contained: the
+    // sweep continues with the remaining records instead of aborting (R1.F1).
+    try {
+      await replyOutcome({
+        mailboxDir,
+        requestId,
+        status,
+        report,
+        workerIdentity: identity,
+        runMailbox: runMailboxImpl,
+      });
+      settled.push(requestId);
+    } catch {
+      skipped.failed += 1;
+    }
   }
-  return { settled };
+  return { settled, skipped };
 }
