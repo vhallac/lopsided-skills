@@ -142,6 +142,9 @@ after the fact.
 - Weave the test requirements into the plan: units consume them as verify
   anchors and review later maps against them. Do not copy a claims table into
   the plan document.
+- Each unit that introduces or changes a committed test carries the claim
+  block emission in its `output:` — the unit is not complete until the claim
+  blocks for the claims that test realizes sit above the test's declaration.
 - The scratchpad is planning-only: `.todo/specs/<work-item>.feature` is never
   committed as a `.feature` file. It is the staging area from which claim
   blocks are emitted during implementation (see below) — a claim promoted
@@ -241,6 +244,9 @@ regression test
 differential diff, or a canary run. Write a new test only when it locks a bug
 or is the named check of a decision. Never write one only so `verify` has
 something to run. If the honest check is inspection, say so and label it weak.
+For a unit that emitted claim blocks, verify includes
+`grep -l 'claim:' <test file>` — a test without its claim block above it is
+an incomplete unit, not a style matter.
 
 ### Extra information (optional)
 
@@ -409,7 +415,9 @@ before the tail unit.
 
 ### Promote durable findings
 
-Before archiving `.todo/`, review `findings.md` and promote claims that hold
+Before archiving `.todo/`, check every claim promoted during the plan is
+grep-verifiable in a committed test (`grep -rn 'claim:' <test paths>` against
+the scratchpad's executable claims), then review `findings.md` and promote claims that hold
 beyond this task into `design/decisions/`. Task-specific errors and dead ends
 stay in the archive — they are provenance, not reusable knowledge.
 
