@@ -6,6 +6,17 @@
 //
 // Usage: node pi-ext/scripts/live-acceptance.mjs [--keep-panes]
 // Exits 0 iff LIVE-ALL-PASS is observed.
+//
+// Claim-block key (R1.F3): the six #40 acceptance checks this orchestrator
+// gates on are the six claim blocks in pi-ext/scripts/live-requester.mjs,
+// one per check id. LIVE-ACCEPTANCE-PASS is emitted only when every id below
+// printed ACC-PASS in the requester log:
+//   claim id: mailbox-ext-ACC/reply-before-wait
+//   claim id: mailbox-ext-ACC/reply-during-tool-rounds
+//   claim id: mailbox-ext-ACC/blocked-wait-released
+//   claim id: mailbox-ext-ACC/duplicate-notification
+//   claim id: mailbox-ext-ACC/worker-stops-without-replying
+//   claim id: mailbox-ext-ACC/session-restart-replacement
 import { execFile } from "node:child_process";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";

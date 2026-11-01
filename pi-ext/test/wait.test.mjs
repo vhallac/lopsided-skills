@@ -36,6 +36,16 @@ async function setup() {
  *     Then the call blocks without consuming LLM rounds
  *     And when B replies, the wait returns the outcome
  */
+/**
+ * Claim block (R1.F3):
+ *   claim id: mailbox-ext-SC-5/5
+ *   claim: A observes the structured outcome (DONE | NEEDS_INPUT | BLOCKED | FAILED)
+ *     and proceeds
+ *   scenario: Given a dispatched request whose worker persisted a reply with a
+ *     structured status
+ *     When A calls agent_wait and the outcome is observed
+ *     Then the wait returns the outcome carrying exactly that status and report
+ */
 test("SC-2/2: wait blocks via in-extension poll loop and returns the outcome when B replies", async () => {
   const { mailboxDir, requestId } = await setup();
 
