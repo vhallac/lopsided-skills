@@ -1,5 +1,6 @@
 # Design decisions
 
+015 — offline-review-target — accepted
 014 — cancel-is-terminal — proposed
 013 — mailbox-record-mutation-locking — proposed
 012 — mailbox-store-error-handling — proposed
