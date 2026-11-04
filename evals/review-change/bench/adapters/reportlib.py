@@ -131,13 +131,15 @@ def parse_report(path: str) -> tuple[dict, list[Finding]]:
         fm2 = FIELD_RE.match(line)
         if fm2:
             key = fm2.group(1).strip()
-            if active_field is None or key in KNOWN_FIELDS:
+            # Only the known format field labels start a field; any other
+            # bold bullet is a continuation of the active field (or, before
+            # any field has started, is skipped).
+            if key in KNOWN_FIELDS:
                 current.fields[key] = fm2.group(2).strip()
                 active_field = key
                 continue
-            # Unknown bold bullet while a field is active: continuation of
-            # that field's value, not a new field.
-            current.fields[active_field] += " " + line.strip()
+            if active_field:
+                current.fields[active_field] += " " + line.strip()
             continue
         if active_field and line.strip():
             # continuation of a multi-line field, including bulleted lines
