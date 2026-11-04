@@ -20,6 +20,20 @@ BACKTICK_RE = re.compile(r"`([^`]+)`")
 PATH_LINE_RE = re.compile(r"^([\w./@+-]+?):(\d+)(?:-(\d+))?$")
 PATH_RE = re.compile(r"^[\w./@+-]*[./][\w./@+-]*$")
 
+# Field labels defined by the review-report/1 format. Only these start a new
+# field; any other bold bullet inside a field value is a continuation of that
+# value (e.g. an unindented `- **Note:** ...` line must not split the field).
+KNOWN_FIELDS = {
+    "Anchor",
+    "Claim / expected",
+    "Existing behavior",
+    "Trigger",
+    "Consequence",
+    "Evidence",
+    "Likelihood",
+    "Recommended correction",
+}
+
 SEVERITY_MAP = {
     "blocking": "high",
     "important": "high",
@@ -117,8 +131,13 @@ def parse_report(path: str) -> tuple[dict, list[Finding]]:
         fm2 = FIELD_RE.match(line)
         if fm2:
             key = fm2.group(1).strip()
-            current.fields[key] = fm2.group(2).strip()
-            active_field = key
+            if active_field is None or key in KNOWN_FIELDS:
+                current.fields[key] = fm2.group(2).strip()
+                active_field = key
+                continue
+            # Unknown bold bullet while a field is active: continuation of
+            # that field's value, not a new field.
+            current.fields[active_field] += " " + line.strip()
             continue
         if active_field and line.strip():
             # continuation of a multi-line field, including bulleted lines
