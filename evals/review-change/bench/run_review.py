@@ -1,0 +1,207 @@
+#!/usr/bin/env python3
+"""Run `review-change` non-interactively against a materialized task.
+
+The runner closes the gap the spike left open: it takes the local target
+`materialize.py` produced, invokes a fresh `pi --print` round with the
+`review-change` skill loaded, captures the emitted `review-report/1`, and hands
+it to the benchmark adapter named in the task manifest. `review-change` itself
+is not modified.
+
+Usage:
+  # end to end (requires the `pi` binary; clone/network already done)
+  python run_review.py --task DIR [--label L] [--model PATTERN] [--timeout SECS]
+
+  # replay an existing report through the adapter, without invoking pi
+  python run_review.py --task DIR --report REPORT.md [--adapter-python PYTHON]
+
+The report is written to the system temp dir; the runner points the `pi`
+subprocess at a private `TMPDIR` so it can find the emitted file. Everything
+the run produces lands under `<task>/run/`.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+BENCH_DIR = Path(__file__).resolve().parent
+sys.path.insert(0, str(BENCH_DIR))
+from tasklib import load_manifest  # noqa: E402
+
+DEFAULT_SKILL = BENCH_DIR.parents[2] / "skills" / "review-change"
+
+PROMPT_TEMPLATE = """Run the review-change skill on the local target below. This is a \
+disposable, hermetic fixture: do not modify or commit anything, and do not \
+publish — stop after writing the report.
+
+Work item (tracker: local-file; read it with `cat {work_item}`):
+  {work_item}
+
+Repository under review:
+  {repo}
+Branch: {branch}
+Reviewed commit (head): {head}
+Merge base (base): {base}
+Report label: {label}
+Private TMPDIR: {tmpdir}
+
+The change under review is the commit range {base}...{head}. Follow \
+review-change exactly: resolve the work-item target from the file above, choose \
+implementation mode, create the review worktree from {repo} at {head}, gather \
+evidence, falsify, and write the report to the system temp dir using label \
+{label}. Do not call publish-review. End your reply with the full path of the \
+report you wrote.
+"""
+
+
+def build_prompt(manifest: dict, task_dir: str | Path, label: str, tmpdir: str | Path) -> str:
+    task_dir = Path(task_dir)
+    branch = manifest.get("branch") or f"review/{manifest['id']}"
+    return PROMPT_TEMPLATE.format(
+        id=manifest["id"],
+        repo=task_dir / "repo",
+        work_item=task_dir / "work-item.md",
+        branch=branch,
+        base=manifest["base"],
+        head=manifest["head"],
+        label=label,
+        tmpdir=tmpdir,
+    )
+
+
+def _pi_binary() -> str:
+    return os.environ.get("PI_BIN") or shutil.which("pi") or "pi"
+
+
+def _adapter_python(explicit: str | None) -> list[str]:
+    """A python command that can import PyYAML (the adapters' one dependency)."""
+    if explicit:
+        return [explicit]
+    try:
+        import yaml  # noqa: F401
+        return [sys.executable]
+    except ImportError:
+        if shutil.which("uv"):
+            return ["uv", "run", "--with", "pyyaml", "python"]
+        return [sys.executable]
+
+
+def find_report(tmpdir: str | Path) -> Path | None:
+    reports = sorted(Path(tmpdir).glob("review-*.md"), key=lambda p: p.stat().st_mtime)
+    return reports[-1] if reports else None
+
+
+def invoke_pi(prompt: str, skill: str, model: str | None, timeout: int | None,
+              task_dir: Path, run_dir: Path, tmpdir: Path) -> int:
+    cmd = [_pi_binary(), "--print", "--no-session"]
+    if model:
+        cmd += ["--model", model]
+    cmd += ["--skill", str(skill), "--approve", prompt]
+
+    env = os.environ.copy()
+    env["TMPDIR"] = str(tmpdir)
+    with open(run_dir / "transcript.txt", "w", encoding="utf-8") as out, \
+            open(run_dir / "pi.stderr", "w", encoding="utf-8") as err:
+        proc = subprocess.run(
+            cmd, cwd=str(task_dir), env=env, stdout=out, stderr=err,
+            text=True, timeout=timeout,
+        )
+    return proc.returncode
+
+
+def _resolve_judge_path(value: str, manifest_dir: Path) -> str:
+    p = Path(value)
+    return str(p if p.is_absolute() else manifest_dir / p)
+
+
+def adapt(manifest: dict, report: Path, run_dir: Path, python_cmd: list[str],
+          manifest_dir: Path) -> str | None:
+    judge = manifest.get("judge") or {}
+    name = judge.get("adapter", "none")
+    if name in ("", "none"):
+        return None
+
+    if name == "reviewbench":
+        out = run_dir / "candidate.json"
+        cmd = python_cmd + [
+            str(BENCH_DIR / "adapters" / "to_reviewbench.py"), str(report),
+            "--repo", judge["repo"], "--pr", str(judge["pr"]),
+            "--base", judge["base"], "--head", judge["head"],
+            "--agent", judge.get("agent", "review-change"), "--out", str(out),
+        ]
+    elif name == "martian":
+        model_dir = run_dir / "martian"
+        data = model_dir / "benchmark_data.json"
+        cmd = python_cmd + [
+            str(BENCH_DIR / "adapters" / "to_martian.py"), str(report),
+            "--pr-url", judge["pr_url"],
+            "--model-dir", str(model_dir), "--out-data", str(data),
+            "--golden-comments", _resolve_judge_path(judge["golden_comments"], manifest_dir),
+        ]
+    else:
+        raise SystemExit(f"error: unknown judge adapter {name!r}")
+
+    proc = subprocess.run(cmd, text=True, capture_output=True)
+    sys.stdout.write(proc.stdout)
+    if proc.returncode != 0:
+        sys.stderr.write(proc.stderr)
+        raise SystemExit(f"error: adapter {name!r} failed with exit {proc.returncode}")
+    return str(out) if name == "reviewbench" else str(data)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Run review-change against a materialized task.")
+    ap.add_argument("--task", required=True, help="materialized task directory (holds task.json)")
+    ap.add_argument("--report", help="existing review-report/1; skip invoking pi")
+    ap.add_argument("--label", help="report label (default: task id)")
+    ap.add_argument("--out", help="run directory (default: <task>/run)")
+    ap.add_argument("--skill", default=str(DEFAULT_SKILL), help="review-change skill path")
+    ap.add_argument("--model", help="pi model pattern")
+    ap.add_argument("--timeout", type=int, default=1800, help="pi timeout in seconds")
+    ap.add_argument("--no-adapt", action="store_true", help="stop at the report")
+    ap.add_argument("--adapter-python", help="python executable that can import PyYAML")
+    args = ap.parse_args()
+
+    task_dir = Path(args.task).resolve()
+    manifest_path = task_dir / "task.json"
+    manifest = load_manifest(str(manifest_path))
+    run_dir = Path(args.out).resolve() if args.out else task_dir / "run"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    label = args.label or str(manifest["id"]).replace("/", "-")
+
+    if args.report:
+        report = Path(args.report).resolve()
+        if not report.exists():
+            raise SystemExit(f"error: report not found: {report}")
+    else:
+        tmpdir = run_dir / "tmp"
+        tmpdir.mkdir(parents=True, exist_ok=True)
+        prompt = build_prompt(manifest, task_dir, label, tmpdir)
+        (run_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
+        rc = invoke_pi(prompt, args.skill, args.model, args.timeout, task_dir, run_dir, tmpdir)
+        if rc != 0:
+            err = (run_dir / "pi.stderr").read_text(encoding="utf-8")[-2000:]
+            raise SystemExit(f"error: pi exited {rc}\n{err}")
+        found = find_report(tmpdir)
+        if found is None:
+            raise SystemExit(f"error: no review-*.md under {tmpdir}; see {run_dir / 'transcript.txt'}")
+        report = found
+
+    kept = run_dir / "review.md"
+    shutil.copy(report, kept)
+
+    candidate = None
+    if not args.no_adapt:
+        candidate = adapt(manifest, kept, run_dir, _adapter_python(args.adapter_python),
+                          manifest_path.parent)
+
+    print(json.dumps({"report": str(kept), "candidate": candidate}, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
