@@ -1,0 +1,47 @@
+[
+  {
+    "pr_key": "axios_axios_10836-9cd706cc",
+    "candidate_findings": [
+      {
+        "file": "README.md",
+        "start_line": 498,
+        "end_line": 510,
+        "message": "The added code inside the `try` block has no indentation relative to the block — all statements sit at column 0 while t…\nThe added code inside the `try` block has no indentation relative to the block — all statements sit at column 0 while the surrounding `try {` and `} catch` are indented by 2 spaces. This makes the documentation example visually misleading, suggesting the statements are outside the try/catch block rather than inside it, which is actively confusing for developers reading the example.\nas described above.\ndescribed above.\nDocumentation examples are copied by developers; broken indentation actively misleads readers about code structure, undermining the very clarity the PR claims to improve.\ngolden replay.",
+        "status": "matched_tp",
+        "matched_golden_index": 0,
+        "covered_golden_indices": [
+          0
+        ],
+        "golden_tp_fp": "tp",
+        "golden_severity": "medium",
+        "golden_category": "documentation",
+        "matched_to_ground_truth": true,
+        "llm_judged_match": true,
+        "match_method": "llm",
+        "matched_truth_label": "tp",
+        "result_severity": "medium",
+        "result_category": "documentation"
+      },
+      {
+        "file": "README.md",
+        "start_line": 498,
+        "end_line": 507,
+        "message": "This new async/await example is now nearly identical to the promise-chain example immediately above (lines 478–493), wh…\nThis new async/await example is now nearly identical to the promise-chain example immediately above (lines 478–493), which already demonstrates the `params` option. The previous `axios.get('/user?ID=12345')` was intentionally a minimal example showcasing async/await syntax (the comment on line 495 says \"Want to use async/await?\"), not the `params` option. Duplicating the `params` example here removes the simpler illustration of async/await without adding new information. Consider keeping the example concise or aligning with the PR description's claim of mirroring instead of duplicating.\nas described above.\ndescribed above.\nDocumentation-only change with no behavioral impact, but it reduces the educational value of the examples by duplicating content that was previously complementary.\ngolden replay.",
+        "status": "matched_tp",
+        "matched_golden_index": 1,
+        "covered_golden_indices": [
+          1
+        ],
+        "golden_tp_fp": "tp",
+        "golden_severity": "low",
+        "golden_category": "documentation",
+        "matched_to_ground_truth": true,
+        "llm_judged_match": true,
+        "match_method": "llm",
+        "matched_truth_label": "tp",
+        "result_severity": "low",
+        "result_category": "documentation"
+      }
+    ]
+  }
+]

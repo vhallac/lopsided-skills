@@ -1,0 +1,266 @@
+{
+  "macro": {
+    "overall": {
+      "grounded_precision": 1,
+      "grounded_recall": 1,
+      "augmented_precision": 1,
+      "augmented_recall": 1,
+      "novel_tp_count": 0,
+      "novel_tp_yield": 0,
+      "candidate_count": 2,
+      "golden_tp_count": 2,
+      "matched_count": 2,
+      "matched_tp_count": 2,
+      "unmatched_count": 0,
+      "unmatched_tp_count": 0,
+      "unmatched_fp_count": 0,
+      "golden_covered_count": 2
+    },
+    "by_severity": {
+      "medium": {
+        "grounded_precision": 1,
+        "grounded_recall": 1,
+        "augmented_precision": 1,
+        "augmented_recall": 1,
+        "novel_tp_count": 0,
+        "novel_tp_yield": 0,
+        "candidate_count": 1,
+        "golden_tp_count": 1,
+        "matched_count": 1,
+        "matched_tp_count": 1,
+        "unmatched_count": 0,
+        "unmatched_tp_count": 0,
+        "unmatched_fp_count": 0,
+        "golden_covered_count": 1
+      },
+      "low": {
+        "grounded_precision": 1,
+        "grounded_recall": 1,
+        "augmented_precision": 1,
+        "augmented_recall": 1,
+        "novel_tp_count": 0,
+        "novel_tp_yield": 0,
+        "candidate_count": 1,
+        "golden_tp_count": 1,
+        "matched_count": 1,
+        "matched_tp_count": 1,
+        "unmatched_count": 0,
+        "unmatched_tp_count": 0,
+        "unmatched_fp_count": 0,
+        "golden_covered_count": 1
+      }
+    },
+    "by_category": {
+      "documentation": {
+        "grounded_precision": 1,
+        "grounded_recall": 1,
+        "augmented_precision": 1,
+        "augmented_recall": 1,
+        "novel_tp_count": 0,
+        "novel_tp_yield": 0,
+        "candidate_count": 2,
+        "golden_tp_count": 2,
+        "matched_count": 2,
+        "matched_tp_count": 2,
+        "unmatched_count": 0,
+        "unmatched_tp_count": 0,
+        "unmatched_fp_count": 0,
+        "golden_covered_count": 2
+      }
+    }
+  },
+  "micro": {
+    "overall": {
+      "grounded_precision": 1,
+      "grounded_recall": 1,
+      "augmented_precision": 1,
+      "augmented_recall": 1,
+      "novel_tp_count": 0,
+      "novel_tp_yield": 0,
+      "candidate_count": 2,
+      "golden_tp_count": 2,
+      "matched_count": 2,
+      "matched_tp_count": 2,
+      "unmatched_count": 0,
+      "unmatched_tp_count": 0,
+      "unmatched_fp_count": 0,
+      "golden_covered_count": 2
+    },
+    "by_severity": {
+      "medium": {
+        "grounded_precision": 1,
+        "grounded_recall": 1,
+        "augmented_precision": 1,
+        "augmented_recall": 1,
+        "novel_tp_count": 0,
+        "novel_tp_yield": 0,
+        "candidate_count": 1,
+        "golden_tp_count": 1,
+        "matched_count": 1,
+        "matched_tp_count": 1,
+        "unmatched_count": 0,
+        "unmatched_tp_count": 0,
+        "unmatched_fp_count": 0,
+        "golden_covered_count": 1
+      },
+      "low": {
+        "grounded_precision": 1,
+        "grounded_recall": 1,
+        "augmented_precision": 1,
+        "augmented_recall": 1,
+        "novel_tp_count": 0,
+        "novel_tp_yield": 0,
+        "candidate_count": 1,
+        "golden_tp_count": 1,
+        "matched_count": 1,
+        "matched_tp_count": 1,
+        "unmatched_count": 0,
+        "unmatched_tp_count": 0,
+        "unmatched_fp_count": 0,
+        "golden_covered_count": 1
+      }
+    },
+    "by_category": {
+      "documentation": {
+        "grounded_precision": 1,
+        "grounded_recall": 1,
+        "augmented_precision": 1,
+        "augmented_recall": 1,
+        "novel_tp_count": 0,
+        "novel_tp_yield": 0,
+        "candidate_count": 2,
+        "golden_tp_count": 2,
+        "matched_count": 2,
+        "matched_tp_count": 2,
+        "unmatched_count": 0,
+        "unmatched_tp_count": 0,
+        "unmatched_fp_count": 0,
+        "golden_covered_count": 2
+      }
+    }
+  },
+  "pr_count": 1,
+  "per_pr": [
+    {
+      "pr_key": "axios_axios_10836-9cd706cc",
+      "metrics": {
+        "overall": {
+          "grounded_precision": 1,
+          "grounded_recall": 1,
+          "augmented_precision": 1,
+          "augmented_recall": 1,
+          "novel_tp_count": 0,
+          "novel_tp_yield": 0,
+          "candidate_count": 2,
+          "golden_tp_count": 2,
+          "matched_count": 2,
+          "matched_tp_count": 2,
+          "unmatched_count": 0,
+          "unmatched_tp_count": 0,
+          "unmatched_fp_count": 0,
+          "golden_covered_count": 2
+        },
+        "by_severity": {
+          "medium": {
+            "grounded_precision": 1,
+            "grounded_recall": 1,
+            "augmented_precision": 1,
+            "augmented_recall": 1,
+            "novel_tp_count": 0,
+            "novel_tp_yield": 0,
+            "candidate_count": 1,
+            "golden_tp_count": 1,
+            "matched_count": 1,
+            "matched_tp_count": 1,
+            "unmatched_count": 0,
+            "unmatched_tp_count": 0,
+            "unmatched_fp_count": 0,
+            "golden_covered_count": 1
+          },
+          "low": {
+            "grounded_precision": 1,
+            "grounded_recall": 1,
+            "augmented_precision": 1,
+            "augmented_recall": 1,
+            "novel_tp_count": 0,
+            "novel_tp_yield": 0,
+            "candidate_count": 1,
+            "golden_tp_count": 1,
+            "matched_count": 1,
+            "matched_tp_count": 1,
+            "unmatched_count": 0,
+            "unmatched_tp_count": 0,
+            "unmatched_fp_count": 0,
+            "golden_covered_count": 1
+          }
+        },
+        "by_category": {
+          "documentation": {
+            "grounded_precision": 1,
+            "grounded_recall": 1,
+            "augmented_precision": 1,
+            "augmented_recall": 1,
+            "novel_tp_count": 0,
+            "novel_tp_yield": 0,
+            "candidate_count": 2,
+            "golden_tp_count": 2,
+            "matched_count": 2,
+            "matched_tp_count": 2,
+            "unmatched_count": 0,
+            "unmatched_tp_count": 0,
+            "unmatched_fp_count": 0,
+            "golden_covered_count": 2
+          }
+        }
+      }
+    }
+  ],
+  "candidate_usage": {
+    "pr_count": 1,
+    "reported_pr_count": 0,
+    "coverage": {
+      "prompt_tokens": 0,
+      "completion_tokens": 0,
+      "total_tokens": 0,
+      "cached_tokens": 0,
+      "time_in_ms": 0,
+      "cost_usd": 0
+    },
+    "total": {
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "time_in_ms": null,
+      "cost_usd": null
+    },
+    "per_pr_mean": {
+      "prompt_tokens": null,
+      "completion_tokens": null,
+      "total_tokens": null,
+      "cached_tokens": null,
+      "time_in_ms": null,
+      "cost_usd": null
+    }
+  },
+  "corpus_stats": {
+    "pr_count": 1,
+    "languages": {
+      "JavaScript": 1
+    },
+    "total_lines_changed": 12,
+    "avg_lines_changed": 12,
+    "total_files_changed": 1,
+    "avg_files_changed": 1,
+    "repo_size_kb_p50": 26904,
+    "repos": 1
+  },
+  "eval_config": {
+    "golden_hash": "69c00f55d58ff7cc444ea456e9144514ec20d3f04be275f0b56aba29a1d4c5b6",
+    "classifier_model": "openrouter/deepseek/deepseek-v4.1-flash",
+    "classifier_prompt_hash": "366ed8de84035d233cc741e751e80bbf7a9cf1e5462200f1d570bd2fcd2dbcd4",
+    "matcher_model": "openrouter/deepseek/deepseek-v4.1-flash",
+    "matcher_prompt_hash": "b47f849fa616125245c610f6456f918b016cff404e90ed648777ecfd083b77bb",
+    "evaluated_prs_hash": "cc2cc39db8c0b75ef2e5a91ff817dc8e5dfce4e77333ff13570ef76d3088db5b"
+  }
+}
