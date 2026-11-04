@@ -120,8 +120,8 @@ def parse_report(path: str) -> tuple[dict, list[Finding]]:
             current.fields[key] = fm2.group(2).strip()
             active_field = key
             continue
-        if active_field and line.strip().startswith("-") is False and line.strip():
-            # continuation of a multi-line field
+        if active_field and line.strip():
+            # continuation of a multi-line field, including bulleted lines
             current.fields[active_field] += " " + line.strip()
 
     # likelihood comes from frontmatter

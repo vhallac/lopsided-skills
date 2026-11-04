@@ -4,7 +4,8 @@
 Feeding the golden findings back through the adapter and then the judge is an
 oracle run: recall should be high (the judge should match each candidate to its
 source golden). It validates that the adapter preserves the semantic content
-the judge needs, independent of the review engine.
+the judge needs, independent of the review engine. Only true-positive findings
+are replayed; that is the oracle's contract.
 
   uv run --with pyyaml python golden_to_report.py golden/xxx.json --out oracle.md
 """
@@ -27,11 +28,11 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("golden")
     ap.add_argument("--out", required=True)
-    ap.add_argument("--only-tp", action="store_true", default=True)
     args = ap.parse_args()
 
     g = json.load(open(args.golden, encoding="utf-8"))
-    findings = [f for f in g["findings"] if (not args.only_tp or f.get("tp_fp") == "tp")]
+    # Oracle contract: only true positives are replayed.
+    findings = [f for f in g["findings"] if f.get("tp_fp") == "tp"]
 
     fm_findings = []
     body = ["# Review — oracle (golden findings replayed as a review-change report)\n",

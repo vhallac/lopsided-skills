@@ -47,9 +47,37 @@ judge model and the oracle uses a non-leaderboard judge.
 
 Non-oracle candidate runs were produced during the spike but are withheld: the
 candidate content's file anchors do not correspond to the task identity recorded
-in the same JSON (e.g. an `axios/axios#10836` envelope carrying findings anchored
-in unrelated files). They cannot be published as benchmark data. The oracle
+in the same JSON. They cannot be published as benchmark data. The oracle
 controls and adapters are unaffected.
+
+The following redacted excerpt was recorded during the spike session
+(2026-11-04) so the withholding decision stays auditable. A ReviewBench
+candidate envelope for `axios/axios#10836` carries findings anchored in an
+unrelated project, `pi-ext/agent-mailbox/*.mjs`:
+
+```json
+{
+  "pr": {
+    "repo": "https://github.com/axios/axios",
+    "pr_number": 10836,
+    "base": "90ae1993e0eaa39ccccbaa25957bb23cc5676df7",
+    "head": "9cd706ccb836c581371c760b4c6a5c61c656ea1f"
+  },
+  "agent": "review-change-real",
+  "findings": [
+    {
+      "file": "pi-ext/agent-mailbox/settle.mjs",
+      "message": "settle-on-shutdown sweep aborts on a cancelled request; …"
+    }
+  ]
+}
+```
+
+The martian candidate for `calcom/cal.com#14943` from the same session carries the
+same seven findings under the cal.com PR URL, anchored in the same
+`pi-ext/agent-mailbox/*.mjs` files. In both runs the task identity in the
+envelope and the anchored source tree never match, so neither can be scored
+against that task's golden.
 
 ## Layout
 
