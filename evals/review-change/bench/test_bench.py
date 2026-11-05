@@ -231,6 +231,51 @@ class RunnerTests(unittest.TestCase):
         self.assertGreaterEqual(len(doc["findings"]), 1)
         self.assertTrue((self.task / "run" / "review.md").is_file())
 
+# claim: bench-harness-SC-7/GUAR/test_replay_report_through_martian_adapter
+# claim text: the runner given an existing report and a martian judge with a
+#   golden fixture writes martian/benchmark_data.json and candidates.json,
+#   with candidates.json keyed by the judge pr_url.
+# scenario: Scenario: Runner replays a report through the martian adapter — When the runner is given a report and a martian judge with a golden fixture Then martian/benchmark_data.json and martian/candidates.json are written and candidates.json is keyed by the judge pr_url.
+    def test_replay_report_through_martian_adapter(self) -> None:
+        pr_url = "https://github.com/owner/repo/pull/1"
+        golden = self.root / "golden_comments.json"
+        golden.write_text(
+            json.dumps([{
+                "url": pr_url,
+                "comments": [{"comment": "sample", "severity": "Minor", "category": "style"}],
+            }]),
+            encoding="utf-8",
+        )
+        manifest = _manifest(self.source, judge={
+            "adapter": "martian",
+            "pr_url": pr_url,
+            "golden_comments": str(golden),
+        })
+        manifest_path = self.root / "martian-manifest.json"
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        task = self.root / "martian-task"
+        r = subprocess.run(
+            [sys.executable, str(MATERIALIZE), "--manifest", str(manifest_path), "--out", str(task)],
+            text=True, capture_output=True,
+        )
+        self.assertEqual(r.returncode, 0, r.stderr)
+        report = self.root / "given.md"
+        report.write_text(
+            REPORT_TEMPLATE.format(base=self.source.base, head=self.source.head), encoding="utf-8"
+        )
+        r = subprocess.run(
+            [sys.executable, str(RUNNER), "--task", str(task), "--report", str(report),
+             "--adapter-python", sys.executable],
+            text=True, capture_output=True,
+        )
+        self.assertEqual(r.returncode, 0, r.stderr)
+        data = task / "run" / "martian" / "benchmark_data.json"
+        candidates = task / "run" / "martian" / "candidates.json"
+        self.assertTrue(data.is_file())
+        self.assertTrue(candidates.is_file())
+        doc = json.loads(candidates.read_text(encoding="utf-8"))
+        self.assertIn(pr_url, doc)
+
 # claim: bench-harness-SC-6/GUAR/test_prompt_names_target_and_revision
 # claim text: the rendered prompt names the work item, the repository path and
 #   the head commit.
