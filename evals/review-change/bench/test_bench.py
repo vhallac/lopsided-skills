@@ -169,6 +169,35 @@ class MaterializeTests(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertTrue((out / "keep").is_file())
 
+# claim: bench-harness-SC-8/GUAR/test_surfaces_git_stderr_on_failure
+# claim text: when the clone or fetch fails, the raised error carries the
+#   failing command's stderr.
+# scenario: Scenario: Materializer surfaces git stderr on failure — When the clone or fetch fails Then the raised error carries the failing command's stderr.
+    def test_surfaces_git_stderr_on_failure(self) -> None:
+        missing = self.root / "does-not-exist"
+        manifest = _manifest(self.source)
+        manifest["source"] = str(missing)
+        r = self._materialize(self._write_manifest(manifest), self.root / "bad-source")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("does-not-exist", r.stderr)
+        self.assertNotIn("Traceback", r.stderr)
+
+# claim: bench-harness-SC-9/GUAR/test_refuses_existing_non_directory_out
+# claim text: an existing file or symlink-to-file `--out` is refused with the
+#   guarded message, not a traceback.
+# scenario: Scenario: Materializer rejects an existing non-directory --out — When --out names an existing file or a symlink to one Then the command fails with the guarded message, not a traceback.
+    def test_refuses_existing_non_directory_out(self) -> None:
+        target = self.root / "existing-file"
+        target.write_text("x", encoding="utf-8")
+        link = self.root / "file-link"
+        link.symlink_to(target)
+        for label, path in (("file", target), ("symlink-to-file", link)):
+            with self.subTest(out=label):
+                r = self._materialize(self._write_manifest(_manifest(self.source)), path)
+                self.assertNotEqual(r.returncode, 0)
+                self.assertIn("not a directory", r.stderr.lower())
+                self.assertNotIn("Traceback", r.stderr)
+
 
 @unittest.skipUnless(HAVE_YAML, "PyYAML required; run under uv run --with pyyaml")
 class AdapterTests(unittest.TestCase):

@@ -46,7 +46,11 @@ WORK_ITEM_TEMPLATE = """# {title}
 
 
 def _run(cmd: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, cwd=str(cwd) if cwd else None, check=True, text=True, capture_output=True)
+    proc = subprocess.run(cmd, cwd=str(cwd) if cwd else None, text=True, capture_output=True)
+    if proc.returncode != 0:
+        detail = (proc.stderr or proc.stdout or "").strip()
+        raise SystemExit(f"error: {' '.join(cmd)} failed with exit {proc.returncode}: {detail}")
+    return proc
 
 
 def _rev_parse(repo: Path, rev: str) -> str | None:
@@ -71,6 +75,8 @@ def _ensure_commit(repo: Path, rev: str) -> str:
 
 def materialize(manifest: dict, out_dir: str | Path, force: bool = False) -> dict:
     out = Path(out_dir).resolve()
+    if out.exists() and not out.is_dir():
+        raise SystemExit(f"error: --out {out} exists and is not a directory")
     if out.exists() and any(out.iterdir()):
         if not force:
             raise SystemExit(f"error: {out} exists and is not empty (use --force)")
