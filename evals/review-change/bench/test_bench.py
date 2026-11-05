@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -315,6 +316,51 @@ class RunnerTests(unittest.TestCase):
         self.assertIn(str(self.task / "work-item.md"), prompt)
         self.assertIn(self.source.head, prompt)
         self.assertIn(str(self.task / "repo"), prompt)
+
+# claim: bench-harness-SC-10/GUAR/test_validates_judge_fields_before_pi
+# claim text: a reviewbench or martian judge missing a required field raises
+#   ManifestError before pi or any adapter runs.
+# scenario: Scenario: Runner validates judge fields before invoking pi — When the judge adapter is reviewbench or martian and a required field is absent Then the runner raises ManifestError before running pi or the adapter.
+    def test_validates_judge_fields_before_pi(self) -> None:
+        manifest = json.loads((self.task / "task.json").read_text(encoding="utf-8"))
+        manifest["judge"] = {"adapter": "reviewbench", "repo": "r", "pr": 1}
+        (self.task / "task.json").write_text(json.dumps(manifest), encoding="utf-8")
+        marker = self.root / "pi-ran-marker"
+        fake_pi = self.root / "fake-pi.sh"
+        fake_pi.write_text(f"#!/bin/sh\ntouch {marker}\nexit 0\n", encoding="utf-8")
+        fake_pi.chmod(0o755)
+        env = dict(os.environ, PI_BIN=str(fake_pi))
+        r = subprocess.run(
+            [sys.executable, str(RUNNER), "--task", str(self.task)],
+            text=True, capture_output=True, env=env,
+        )
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("judge", r.stderr.lower())
+        self.assertFalse(marker.exists())
+        with self.assertRaises(run_review.ManifestError):
+            run_review.validate_judge({"judge": {"adapter": "martian", "pr_url": "u"}})
+
+# claim: bench-harness-SC-11/GUAR/test_fails_on_stale_report_instead_of_re_adapting
+# claim text: a prior run's report in the private tmpdir is cleared so a pi run
+#   that emits nothing fails instead of re-adapting the stale report.
+# scenario: Scenario: Runner clears the private tmpdir before a run — When a prior run left a review-*.md in the private tmpdir and pi emits nothing Then the runner fails instead of re-adapting the stale report.
+    def test_fails_on_stale_report_instead_of_re_adapting(self) -> None:
+        tmpdir = self.task / "run" / "tmp"
+        tmpdir.mkdir(parents=True, exist_ok=True)
+        stale = tmpdir / "review-stale.md"
+        stale.write_text(
+            REPORT_TEMPLATE.format(base=self.source.base, head=self.source.head), encoding="utf-8"
+        )
+        fake_pi = self.root / "silent-pi.sh"
+        fake_pi.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        fake_pi.chmod(0o755)
+        env = dict(os.environ, PI_BIN=str(fake_pi))
+        r = subprocess.run(
+            [sys.executable, str(RUNNER), "--task", str(self.task), "--adapter-python", sys.executable],
+            text=True, capture_output=True, env=env,
+        )
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("no review-", r.stderr)
 
 
 if __name__ == "__main__":

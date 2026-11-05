@@ -30,7 +30,12 @@ from pathlib import Path
 
 BENCH_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BENCH_DIR))
-from tasklib import load_manifest  # noqa: E402
+from tasklib import ManifestError, load_manifest  # noqa: E402
+
+JUDGE_REQUIRED = {
+    "reviewbench": ("repo", "pr", "base", "head"),
+    "martian": ("pr_url", "golden_comments"),
+}
 
 DEFAULT_SKILL = BENCH_DIR.parents[2] / "skills" / "review-change"
 
@@ -71,6 +76,20 @@ def build_prompt(manifest: dict, task_dir: str | Path, label: str, tmpdir: str |
         label=label,
         tmpdir=tmpdir,
     )
+
+
+def validate_judge(manifest: dict) -> None:
+    """Reject a malformed judge before pi or any adapter runs."""
+    judge = manifest.get("judge") or {}
+    name = judge.get("adapter", "none")
+    if name in ("", "none"):
+        return
+    required = JUDGE_REQUIRED.get(name)
+    if required is None:
+        raise ManifestError(f"judge: unknown adapter {name!r}")
+    missing = [field for field in required if not judge.get(field)]
+    if missing:
+        raise ManifestError(f"judge ({name}): missing required field(s): {', '.join(missing)}")
 
 
 def _pi_binary() -> str:
@@ -169,6 +188,7 @@ def main() -> int:
     task_dir = Path(args.task).resolve()
     manifest_path = task_dir / "task.json"
     manifest = load_manifest(str(manifest_path))
+    validate_judge(manifest)
     run_dir = Path(args.out).resolve() if args.out else task_dir / "run"
     run_dir.mkdir(parents=True, exist_ok=True)
     label = args.label or str(manifest["id"]).replace("/", "-")
@@ -179,6 +199,8 @@ def main() -> int:
             raise SystemExit(f"error: report not found: {report}")
     else:
         tmpdir = run_dir / "tmp"
+        if tmpdir.exists():
+            shutil.rmtree(tmpdir)
         tmpdir.mkdir(parents=True, exist_ok=True)
         prompt = build_prompt(manifest, task_dir, label, tmpdir)
         (run_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
