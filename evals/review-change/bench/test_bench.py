@@ -339,6 +339,8 @@ class RunnerTests(unittest.TestCase):
         self.assertFalse(marker.exists())
         with self.assertRaises(run_review.ManifestError):
             run_review.validate_judge({"judge": {"adapter": "martian", "pr_url": "u"}})
+        with self.assertRaises(run_review.ManifestError):
+            run_review.validate_judge({"judge": "reviewbench"})
 
 # claim: bench-harness-SC-11/GUAR/test_fails_on_stale_report_instead_of_re_adapting
 # claim text: a prior run's report in the private tmpdir is cleared so a pi run

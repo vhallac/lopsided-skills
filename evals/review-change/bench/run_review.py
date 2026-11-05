@@ -81,6 +81,8 @@ def build_prompt(manifest: dict, task_dir: str | Path, label: str, tmpdir: str |
 def validate_judge(manifest: dict) -> None:
     """Reject a malformed judge before pi or any adapter runs."""
     judge = manifest.get("judge") or {}
+    if not isinstance(judge, dict):
+        raise ManifestError(f"judge: must be an object, got {type(judge).__name__}")
     name = judge.get("adapter", "none")
     if name in ("", "none"):
         return
