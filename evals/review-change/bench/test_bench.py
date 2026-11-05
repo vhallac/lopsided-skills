@@ -133,6 +133,10 @@ class MaterializeTests(unittest.TestCase):
             text=True, capture_output=True,
         )
 
+# claim: bench-harness-SC-1/GUAR/test_checks_out_head_and_writes_work_item
+# claim text: materializing a valid `review-task/1` manifest checks out the
+#   pinned head commit and writes a work item naming the task id and head.
+# scenario: Scenario: Materializer checks out the pinned head and writes a work item — Then the clone's HEAD equals the pinned head, the work item names the branch, base and head, and task.json is written.
     def test_checks_out_head_and_writes_work_item(self) -> None:
         out = self.root / "task"
         r = self._materialize(self._write_manifest(_manifest(self.source)), out)
@@ -143,6 +147,9 @@ class MaterializeTests(unittest.TestCase):
         self.assertIn(self.source.head, work_item)
         self.assertTrue((out / "task.json").is_file())
 
+# claim: bench-harness-SC-2/GUAR/test_rejects_manifest_missing_head
+# claim text: a manifest omitting `head` is rejected, naming the missing field.
+# scenario: Scenario: Materializer rejects a manifest missing head — When the manifest omits head Then the command fails naming the missing field.
     def test_rejects_manifest_missing_head(self) -> None:
         manifest = _manifest(self.source)
         del manifest["head"]
@@ -150,6 +157,10 @@ class MaterializeTests(unittest.TestCase):
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("head", r.stderr.lower())
 
+# claim: bench-harness-SC-3/GUAR/test_refuses_non_empty_output_without_force
+# claim text: a non-empty output directory without `--force` is refused and
+#   left untouched.
+# scenario: Scenario: Materializer refuses a non-empty output without --force — When the output directory is non-empty and --force is absent Then the command fails and leaves the directory untouched.
     def test_refuses_non_empty_output_without_force(self) -> None:
         out = self.root / "taken"
         out.mkdir()
@@ -161,6 +172,10 @@ class MaterializeTests(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_YAML, "PyYAML required; run under uv run --with pyyaml")
 class AdapterTests(unittest.TestCase):
+# claim: bench-harness-SC-4/GUAR/test_report_maps_to_non_empty_candidate
+# claim text: a well-formed `review-report/1` maps through the reviewbench
+#   adapter to a non-empty candidate with a mapped file.
+# scenario: Scenario: reviewbench adapter maps a report to a non-empty candidate — When a review-report/1 is passed to to_reviewbench.py Then candidate.json holds at least one finding with a mapped file.
     def test_report_maps_to_non_empty_candidate(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -197,6 +212,10 @@ class RunnerTests(unittest.TestCase):
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
+# claim: bench-harness-SC-5/GUAR/test_replay_report_through_runner_produces_candidate
+# claim text: the runner given an existing report writes candidate.json and
+#   keeps a copy at run/review.md.
+# scenario: Scenario: Runner replays a report through the reviewbench adapter — When the runner is given an existing report Then candidate.json is written and a copy is kept at run/review.md.
     def test_replay_report_through_runner_produces_candidate(self) -> None:
         report = self.root / "given.md"
         report.write_text(REPORT_TEMPLATE.format(base=self.source.base, head=self.source.head), encoding="utf-8")
@@ -212,6 +231,10 @@ class RunnerTests(unittest.TestCase):
         self.assertGreaterEqual(len(doc["findings"]), 1)
         self.assertTrue((self.task / "run" / "review.md").is_file())
 
+# claim: bench-harness-SC-6/GUAR/test_prompt_names_target_and_revision
+# claim text: the rendered prompt names the work item, the repository path and
+#   the head commit.
+# scenario: Scenario: Runner prompt names the target and revision — When build_prompt renders a manifest Then the prompt names the work item, repository and head commit.
     def test_prompt_names_target_and_revision(self) -> None:
         manifest = _manifest(self.source)
         prompt = run_review.build_prompt(manifest, self.task, "fixture-1", self.root / "tmp")
