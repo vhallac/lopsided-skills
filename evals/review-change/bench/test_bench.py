@@ -393,6 +393,10 @@ class RunnerTests(unittest.TestCase):
 class ScoreTests(unittest.TestCase):
     RB_RESULTS = BENCH_DIR / "results" / "rb-oracle-results.json"
 
+# claim: bench-harness-SC-13/GUAR/test_normalizes_reviewbench_oracle_fixture
+# claim text: normalize_reviewbench maps the recorded reviewbench oracle
+#   results to precision/recall/f1 all equal to 1.0.
+# scenario: Scenario: Reviewbench oracle normalizes perfectly — When the recorded reviewbench oracle results fixture is passed through normalize_reviewbench Then precision, recall, and f1 are all exactly 1.0.
     @unittest.skipUnless(RB_RESULTS.is_file(), "reviewbench oracle fixture required")
     def test_normalizes_reviewbench_oracle_fixture(self) -> None:
         raw = json.loads(self.RB_RESULTS.read_text(encoding="utf-8"))
@@ -423,6 +427,12 @@ class ScoreTests(unittest.TestCase):
             candidate.write_text(json.dumps(candidate_doc), encoding="utf-8")
         return score.score(manifest, root, candidate, run_dir)
 
+# claim: bench-harness-SC-14/GUAR/test_statuses_generation_failed_empty_judge_failed_scored
+# claim text: scoring yields generation-failed when the candidate is missing,
+#   empty-candidate for empty findings (judge never invoked), judge-failed on
+#   a nonzero judge exit (never a synthesized score), and scored with 1.0/1.0/1.0
+#   metrics when the stub judge copies the oracle fixture to {out}.
+# scenario: Scenario: Scoring status mapping end to end — When the candidate is absent, has empty findings, the judge exits nonzero, and the judge emits oracle results respectively Then the score status is generation-failed, empty-candidate, judge-failed (no score), and scored with precision/recall/f1 1.0 respectively.
     def test_statuses_generation_failed_empty_judge_failed_scored(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
