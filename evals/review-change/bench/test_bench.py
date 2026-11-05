@@ -31,6 +31,7 @@ REVIEWBENCH_ADAPTER = BENCH_DIR / "adapters" / "to_reviewbench.py"
 
 sys.path.insert(0, str(BENCH_DIR))
 import run_review  # noqa: E402
+import score  # noqa: E402
 
 HAVE_YAML = importlib.util.find_spec("yaml") is not None
 
@@ -342,6 +343,29 @@ class RunnerTests(unittest.TestCase):
         with self.assertRaises(run_review.ManifestError):
             run_review.validate_judge({"judge": "reviewbench"})
 
+# claim: bench-harness-SC-12/GUAR/test_validates_scoring_config_all_or_nothing
+# claim text: a judge scoring config (clone/command/model) given partially or
+#   with non-string values raises ManifestError; the complete set passes.
+# scenario: Scenario: Runner validates judge scoring config — When the judge block names only some of clone/command/model, or one of them is not a non-empty string, Then the runner raises ManifestError; when all three are non-empty strings the judge validates.
+    def test_validates_scoring_config_all_or_nothing(self) -> None:
+        base = {"adapter": "reviewbench", "repo": "r", "pr": 1,
+                "base": "b", "head": "h"}
+        with self.assertRaises(run_review.ManifestError):
+            run_review.validate_judge({"judge": {**base, "clone": "/fork", "command": "c"}})
+        with self.assertRaises(run_review.ManifestError):
+            run_review.validate_judge({"judge": {**base, "clone": "/fork", "model": "m"}})
+        with self.assertRaises(run_review.ManifestError):
+            run_review.validate_judge(
+                {"judge": {**base, "clone": "/fork", "command": "c", "model": 7}})
+        with self.assertRaises(run_review.ManifestError):
+            run_review.validate_judge(
+                {"judge": {**base, "clone": " ", "command": "c", "model": "m"}})
+        run_review.validate_judge(
+            {"judge": {**base, "clone": "/fork", "command": "npm run judge -- {candidate}",
+                       "model": "qwen/qwen3-coder"}})
+        # scoring fields are optional when scoring is not requested
+        run_review.validate_judge({"judge": dict(base)})
+
 # claim: bench-harness-SC-11/GUAR/test_fails_on_stale_report_instead_of_re_adapting
 # claim text: a prior run's report in the private tmpdir is cleared so a pi run
 #   that emits nothing fails instead of re-adapting the stale report.
@@ -363,6 +387,175 @@ class RunnerTests(unittest.TestCase):
         )
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("no review-", r.stderr)
+
+
+@unittest.skipUnless(HAVE_YAML, "PyYAML required; run under uv run --with pyyaml")
+class ScoreTests(unittest.TestCase):
+    RB_RESULTS = BENCH_DIR / "results" / "rb-oracle-results.json"
+
+    @unittest.skipUnless(RB_RESULTS.is_file(), "reviewbench oracle fixture required")
+    def test_normalizes_reviewbench_oracle_fixture(self) -> None:
+        raw = json.loads(self.RB_RESULTS.read_text(encoding="utf-8"))
+        p, r, f = score.normalize_reviewbench(raw)
+        self.assertEqual((p, r, f), (1.0, 1.0, 1.0))
+
+    def _scored_manifest(self, root: Path, command: str, **judge_overrides) -> dict:
+        return {
+            "schema": "review-task/1", "id": "score-fixture",
+            "source": str(root / "src"), "base": "aaa", "head": "bbb",
+            "judge": {
+                "adapter": "reviewbench",
+                "repo": "https://github.com/owner/repo", "pr": 1,
+                "base": "aaa", "head": "bbb",
+                "clone": str(root / "fork"), "command": command, "model": "judge-model-pin",
+                **judge_overrides,
+            },
+        }
+
+    def _run_score(self, manifest: dict, root: Path, candidate: Path | None,
+                   candidate_doc: dict | None = None) -> dict:
+        (root / "fork").mkdir(exist_ok=True)
+        manifest_path = root / "task.json"
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        run_dir = root / "run"
+        run_dir.mkdir(exist_ok=True)
+        if candidate_doc is not None:
+            candidate.write_text(json.dumps(candidate_doc), encoding="utf-8")
+        return score.score(manifest, root, candidate, run_dir)
+
+    def test_statuses_generation_failed_empty_judge_failed_scored(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            boom = f"cp {self.RB_RESULTS} {{out}} && exit 1"
+            # generation-failed: no candidate at all, judge never invoked
+            s = self._run_score(self._scored_manifest(root, boom), root,
+                                root / "run" / "candidate.json")
+            self.assertEqual(s["status"], "generation-failed")
+            self.assertIsNone(s["precision"])
+            # empty-candidate: empty findings never reach the judge
+            empty = root / "run" / "candidate.json"
+            s = self._run_score(self._scored_manifest(root, boom), root, empty,
+                                {"pr": {}, "findings": []})
+            self.assertEqual(s["status"], "empty-candidate")
+            # judge-failed: nonzero exit recorded, not synthesized as a score
+            cand = root / "run" / "candidate.json"
+            s = self._run_score(self._scored_manifest(root, "exit 3"), root, cand,
+                                {"pr": {}, "findings": [{"file": "a"}]})
+            self.assertEqual(s["status"], "judge-failed")
+            self.assertEqual(s["raw_output"], str(root / "run" / "judge-output.json"))
+            # scored: stub judge copies the oracle results to {out}
+            ok = f"cp {self.RB_RESULTS} {{out}}"
+            s = self._run_score(self._scored_manifest(root, ok), root, cand,
+                                {"pr": {}, "findings": [{"file": "a"}]})
+            self.assertEqual(s["status"], "scored")
+            self.assertEqual((s["precision"], s["recall"], s["f1"]), (1.0, 1.0, 1.0))
+            self.assertEqual(s["judge_model"], "judge-model-pin")
+            self.assertEqual(s["schema"], score.SCHEMA)
+
+    def test_cli_writes_run_score_json(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            manifest = self._scored_manifest(
+                root, f"cp {self.RB_RESULTS} {{out}}")
+            (root / "task.json").write_text(json.dumps(manifest), encoding="utf-8")
+            (root / "fork").mkdir()
+            run_dir = root / "run"
+            run_dir.mkdir()
+            cand = run_dir / "candidate.json"
+            cand.write_text(json.dumps({"pr": {}, "findings": [{"file": "a"}]}),
+                            encoding="utf-8")
+            r = subprocess.run(
+                [sys.executable, str(BENCH_DIR / "score.py"), "--task", str(root)],
+                text=True, capture_output=True,
+            )
+            self.assertEqual(r.returncode, 0, r.stderr)
+            doc = json.loads((run_dir / "score.json").read_text(encoding="utf-8"))
+            self.assertEqual(doc["status"], "scored")
+            self.assertEqual(doc["task"], "score-fixture")
+
+
+# claim: bench-harness-SC-15/GUAR/test_runner_wires_scoring
+# claim text: one run of run_review.py emits review.md, the adapted candidate,
+#   and score.json, with the summary carrying the score status.
+# scenario: Scenario: Runner wires scoring — Given a task with scoring config and a stub judge that scores When run_review.py replays a report Then run/ holds review.md, candidate.json, and score.json with status scored, and the summary reports scored.
+class WiringTests(unittest.TestCase):
+    RB_RESULTS = BENCH_DIR / "results" / "rb-oracle-results.json"
+
+    @unittest.skipUnless(RB_RESULTS.is_file(), "reviewbench oracle fixture required")
+    def _task(self, root: Path, command: str) -> Path:
+        manifest = {
+            "schema": "review-task/1", "id": "wiring-fixture",
+            "source": str(root / "src"), "base": "aaa", "head": "bbb",
+            "judge": {
+                "adapter": "reviewbench",
+                "repo": "https://github.com/owner/repo", "pr": 1,
+                "base": "aaa", "head": "bbb",
+                "clone": str(root / "fork"), "command": command,
+                "model": "judge-model-pin",
+            },
+        }
+        (root / "fork").mkdir()
+        (root / "task.json").write_text(json.dumps(manifest), encoding="utf-8")
+        return root
+
+    def _run_runner(self, root: Path, report: Path, *extra: str):
+        return subprocess.run(
+            [sys.executable, str(RUNNER), "--task", str(root), "--report", str(report),
+             "--adapter-python", sys.executable, *extra],
+            text=True, capture_output=True,
+        )
+
+    @unittest.skipUnless(RB_RESULTS.is_file(), "reviewbench oracle fixture required")
+    def test_runner_wires_scoring(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            task = self._task(root, f"cp {self.RB_RESULTS} {{out}}")
+            report = root / "given.md"
+            report.write_text(REPORT_TEMPLATE.format(base="aaa", head="bbb"), encoding="utf-8")
+            r = self._run_runner(task, report)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            run_dir = task / "run"
+            self.assertTrue((run_dir / "review.md").is_file())
+            self.assertTrue((run_dir / "candidate.json").is_file())
+            score_doc = json.loads((run_dir / "score.json").read_text(encoding="utf-8"))
+            self.assertEqual(score_doc["status"], "scored")
+            summary = json.loads(r.stdout[r.stdout.index("{"):])  # adapter line precedes the summary
+            self.assertEqual(summary["status"], "scored")
+            self.assertEqual(summary["score"], str(run_dir / "score.json"))
+
+    @unittest.skipUnless(RB_RESULTS.is_file(), "reviewbench oracle fixture required")
+    def test_runner_propagates_failure_status_as_exit_code(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            task = self._task(root, "exit 3")
+            report = root / "given.md"
+            report.write_text(REPORT_TEMPLATE.format(base="aaa", head="bbb"), encoding="utf-8")
+            r = self._run_runner(task, report)
+            self.assertEqual(r.returncode, 1)
+            score_doc = json.loads((task / "run" / "score.json").read_text(encoding="utf-8"))
+            self.assertEqual(score_doc["status"], "judge-failed")
+            self.assertIsNone(score_doc["precision"])  # never a synthesized 0
+            self.assertEqual(json.loads(r.stdout[r.stdout.index("{"):])["status"], "judge-failed")
+
+    @unittest.skipUnless(RB_RESULTS.is_file(), "reviewbench oracle fixture required")
+    def test_no_score_skips_scoring(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            task = self._task(root, f"cp {self.RB_RESULTS} {{out}}")
+            report = root / "given.md"
+            report.write_text(REPORT_TEMPLATE.format(base="aaa", head="bbb"), encoding="utf-8")
+            r = self._run_runner(task, report, "--no-score")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertFalse((task / "run" / "score.json").exists())
+            self.assertNotIn("status", json.loads(r.stdout[r.stdout.index("{"):]))
+
+    def test_candidate_without_findings_key_is_not_empty(self) -> None:
+        # martian benchmark_data / candidates.json shapes carry no findings key;
+        # emptiness is the judge's call, not the bridge's
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "benchmark_data.json"
+            p.write_text(json.dumps({"https://example/pr/1": {"reviews": []}}), encoding="utf-8")
+            self.assertEqual(score.read_candidate_status(p), "ok")
 
 
 if __name__ == "__main__":
