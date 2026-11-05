@@ -32,7 +32,9 @@ path (hermetic tests). `base`/`head` are the pinned commits of the task.
 Scoring fields (on `judge`): `clone` is the local working copy of the judge's
 fork (the fork stays in its own checkout — the bench never vendors judge
 code), `command` is the judge invocation template run inside that checkout
-(`{candidate}` is replaced by the candidate file path), and `model` is the
+(`{candidate}` is replaced by the candidate file path and `{out}` by the path
+the judge must write its raw JSON output to; both are shell-quoted, so values
+with spaces or metacharacters survive the command), and `model` is the
 judge model pin recorded in every score for reproducibility. They are
 configured as a set: give all three or none — a partial scoring config is
 rejected with `ManifestError`.
