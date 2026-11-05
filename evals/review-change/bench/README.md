@@ -4,10 +4,10 @@ Evaluation harness for the `review-change` skill against public code-review
 benchmarks. This is dev tooling for the skill, deliberately kept out of
 `skills/`; other skills get their own `evals/<skill>/` tree.
 
-The harness is a **spike**, not a finished pipeline. It establishes that a
-`review-report/1` produced by `review-change` can be scored by two independent
-judges. Producing the report from a benchmark task is still an open piece (see
-*Review generation* below).
+The harness establishes that a `review-report/1` produced by `review-change`
+can be scored by two independent judges, and now generates that report from a
+benchmark task offline (see *Review generation* below). It does not change the
+`review-change` skill.
 
 ## Benchmarks
 
@@ -88,6 +88,11 @@ adapters/
   martian_golden_to_report.py   martian golden -> oracle report
   to_reviewbench.py             report -> ReviewBench candidate JSON
   to_martian.py                 report -> martian candidates.json + benchmark_data.json
+materialize.py                  task manifest -> local repo at base/head + work item
+run_review.py                   materialized task -> pi --print -> report -> adapter
+tasklib.py                      review-task/1 manifest loader
+task-manifest.md                manifest format
+test_bench.py                   tests for materialize + runner
 results/
   oracle-axios.md               oracle report for axios/axios#10836
   oracle-martian.md             oracle report for calcom/cal.com#14943
@@ -131,40 +136,70 @@ python adapters/to_martian.py /tmp/oracle-martian.md \
 `reportlib.py` uses `yaml`; run with `uv run --with pyyaml python …` or an
 environment that has PyYAML.
 
-## Review generation (open)
+## Review generation (option 1 — offline local target)
 
-The spike scored reports but never generated one from a task. `review-change`
-resolves a target from a merge/pull request or a work item, so a benchmark task
-must be presented as one of those.
+The spike scored reports but never generated one from a task. Generation is now
+handled by two scripts here; `review-change` is unchanged.
 
-What the benchmark offers:
+`materialize.py` turns a `review-task/1` manifest (`task-manifest.md`) into a
+hermetic local target: it clones the task's source at the pinned base/head,
+checks out the head on a branch, and writes a file-backed work item naming the
+branch and commit. The clone is the only network use; there is no forge,
+tracker, or work-item write.
 
-- **ReviewBench** keeps a mirror per source repository
-  (`review-bench/<owner>_<repo>`) holding each task's base and head commits.
-  Each mirror also carries per-tool evaluation PRs whose base/head equal the
-  task's (`axios_axios` has 50 such PRs, all the same task). Those PRs exist,
-  but they are the benchmark's own runs and their comment threads carry other
-  reviewers' rounds — unsuitable as clean targets.
-- **martian** ships `step0_fork_prs.py`, which clones a source repo, rebuilds
-  the task's base/head branches, and opens a real PR in a chosen org.
+`run_review.py` invokes a fresh `pi --print` round with `review-change` loaded
+against that target, captures the emitted `review-report/1`, and hands it to the
+manifest's benchmark adapter.
 
-Options, in increasing cost:
+```sh
+# 1. describe the task (see task-manifest.md for every field)
+cat > /tmp/task.json <<'JSON'
+{ "schema": "review-task/1", "id": "axios-10836",
+  "source": "https://github.com/review-bench/axios_axios",
+  "base": "90ae19...", "head": "9cd706...",
+  "work_item": {"title": "axios/axios#10836"},
+  "judge": {"adapter": "reviewbench", "repo": "https://github.com/axios/axios",
+            "pr": 10836, "base": "90ae19...", "head": "9cd706..."} }
+JSON
+# 2. build the local target
+python materialize.py --manifest /tmp/task.json --out /tmp/axios-10836
+# 3. generate + map a review (needs the pi binary)
+python run_review.py --task /tmp/axios-10836
+# -> /tmp/axios-10836/run/review.md  and  run/candidate.json
 
-1. **Local target, no forge.** `targets/work-item.md` already accepts a
-   caller-named tracking system plus a branch/commit named by the caller. Build
-   a local repo per task (base/head), write a file-backed work item, and review
-   it offline. No external repos, no skill change, hermetic and repeatable. This
-   is the same "offline fixture target" shape already proposed for the
-   regression set.
-2. **Own clean PR per task.** Adapt `step0_fork_prs.py` to open PRs in the
-   `vhallac` forks (or a dedicated eval org) with the task's base/head. Real MRs,
-   but one repo per task/repo and external sprawl.
-3. **Review the upstream PRs directly.** They are real MRs (`axios/axios#10836`),
-   but many are merged/closed and the repos are the training-leakage surface the
-   benchmark exists to avoid.
+# replay an existing report through the adapter, without pi:
+uv run --with pyyaml python run_review.py --task /tmp/axios-10836 \
+    --report /tmp/axios-10836/run/review.md
+```
 
-Recommendation: **(1)**. It satisfies the skill's target contract without
-mutating external systems, and keeps the harness reproducible against pinned
-commits. Decide whether the materializer and runner live here (this bench tree)
-and whether the "generate reviews" work is filed as an issue rather than built
-inline.
+Why option 1 and not the alternatives: (2) opens one real PR per task/repo —
+external sprawl; (3) reviews the upstream PRs, which are merged/closed and are
+the training-leakage surface the benchmark exists to avoid. Option 1 keeps the
+target resolvable by `review-change` and every run reproducible against pinned
+commits. `materialize.py` never contacts a forge; only the clone uses the
+network.
+
+Tests: `uv run --with pytest --with pyyaml python -m pytest evals/review-change/bench -q`.
+
+## Solution before problem
+
+This harness was built solution-first: **solution before problem**. The record
+says so plainly.
+
+The spike built and validated the *solution* — the benchmark forks, the in/out
+adapters, the judge wiring, the oracle controls — before any *problem instance*
+existed. It could replay a benchmark's golden findings as a report and prove the
+judge recovered them (the oracle runs in `results/`), but it had no way to
+produce a report from a real task: no benchmark task had been materialized as a
+reviewable target. The scoring machinery was exercised; the thing it was meant
+to score was not.
+
+Option 1 constructs the problems to fit the already-validated solution:
+materialize a task at its pinned base/head, present it as a work item, run the
+review engine, and feed the result to the adapters the spike proved. The
+ordering is solution → problem, not problem → solution. The value is that the
+adapters and judge mapping are fixed by existing oracle evidence, so a
+generation failure reads as a review-engine failure rather than a format
+failure. The cost is that the problem instances were not selected for the
+solution's strengths; the materializer and runner exist to close exactly that
+gap. This note is descriptive, not a retro-justification.
