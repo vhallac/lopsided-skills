@@ -158,8 +158,8 @@ def run_judge(manifest: dict, candidate: Path, raw_out: Path, manifest_dir: Path
     command = (judge["command"]
                .replace("{candidate}", shlex.quote(str(candidate)))
                .replace("{out}", shlex.quote(str(raw_out))))
-    proc = subprocess.run(command, shell=True, cwd=str(clone), text=True, capture_output=True)
     raw_out.parent.mkdir(parents=True, exist_ok=True)
+    proc = subprocess.run(command, shell=True, cwd=str(clone), text=True, capture_output=True)
     if proc.returncode != 0:
         # capture stderr on stdout's behalf so failures are still auditable
         raw_out.write_text(proc.stderr, encoding="utf-8")
