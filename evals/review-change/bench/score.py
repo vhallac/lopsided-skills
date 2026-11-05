@@ -154,7 +154,10 @@ def run_judge(manifest: dict, candidate: Path, raw_out: Path, manifest_dir: Path
         clone = manifest_dir / clone
     if not clone.is_dir():
         raise ManifestError(f"judge: clone {clone} is not a directory")
-    command = judge["command"].replace("{candidate}", str(candidate)).replace("{out}", str(raw_out))
+    # paths with spaces or shell metacharacters must survive the command
+    command = (judge["command"]
+               .replace("{candidate}", shlex.quote(str(candidate)))
+               .replace("{out}", shlex.quote(str(raw_out))))
     proc = subprocess.run(command, shell=True, cwd=str(clone), text=True, capture_output=True)
     raw_out.parent.mkdir(parents=True, exist_ok=True)
     if proc.returncode != 0:

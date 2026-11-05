@@ -462,6 +462,19 @@ class ScoreTests(unittest.TestCase):
             self.assertEqual(s["judge_model"], "judge-model-pin")
             self.assertEqual(s["schema"], score.SCHEMA)
 
+    def test_paths_with_spaces_survive_judge_command(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            # task dir with a space exercises {candidate}/{out} quoting
+            root = Path(td) / "task dir with space"
+            root.mkdir()
+            manifest = self._scored_manifest(
+                root, f"cp {self.RB_RESULTS} {{out}}")
+            s = self._run_score(
+                manifest, root, root / "run" / "candidate.json",
+                {"pr": {}, "findings": [{"file": "a"}]})
+            self.assertEqual(s["status"], "scored")
+            self.assertEqual((s["precision"], s["recall"], s["f1"]), (1.0, 1.0, 1.0))
+
     def test_cli_writes_run_score_json(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
