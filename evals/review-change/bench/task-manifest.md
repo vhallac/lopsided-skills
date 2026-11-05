@@ -49,3 +49,13 @@ adapter for the report it produces.
 The base/head in `judge` repeat the task identity the judge validates against;
 they normally equal the top-level `base`/`head`, but the full SHAs are kept
 explicit because the adapter passes them to a judge that checks them literally.
+
+## Limitation: fetching a pinned commit by SHA
+
+`materialize.py` clones `source` and checks out the pinned `base`/`head`. When
+a pinned commit is absent from the clone, it falls back to `git fetch origin
+<sha>`. Git servers that do not enable
+`uploadpack.allowReachableSHA1InWant` refuse a bare-SHA fetch, so the fallback
+fails with git's error even though the commit exists on the remote. Work
+around it by pinning a commit reachable from a fetched ref (a branch or tag
+tip), or by enabling `uploadpack.allowReachableSHA1InWant` on the server.
