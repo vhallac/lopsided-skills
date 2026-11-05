@@ -187,7 +187,9 @@ Tests: `uv run --with pytest --with pyyaml python -m pytest evals/review-change/
 With `judge.clone`, `judge.command`, and `judge.model` set in the manifest (all
 three together, or none — see `task-manifest.md`), `run_review.py` runs the
 judge after adaptation, so one command emits the report, the candidate, and the
-score:
+score. In `judge.command`, `{candidate}` is replaced by the candidate's path
+and `{out}` by the path the judge must write its raw JSON output to; both are
+shell-quoted so paths with spaces are safe.
 
 ```sh
 python run_review.py --task /tmp/axios-10836
