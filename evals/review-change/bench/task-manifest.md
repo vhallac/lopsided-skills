@@ -57,8 +57,8 @@ Scoring fields (on `judge`):
 
 - `clone` — path to a local working copy of the judge's fork; the judge code
   stays in its own fork, it is never vendored into the bench. `~` is expanded,
-  and a relative path resolves against the manifest's directory (same
-  semantics as the top-level `source`).
+  and a relative path resolves against the manifest's directory (this rule is
+  specific to `clone`; the top-level `source` resolves independently).
 - `command` — judge invocation template run inside `clone`; `{candidate}` is
   replaced by the path of the candidate file to score and `{out}` by the path
   the judge must write its raw JSON output to.

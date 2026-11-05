@@ -147,8 +147,8 @@ def run_judge(manifest: dict, candidate: Path, raw_out: Path, manifest_dir: Path
     """Invoke judge.command inside judge.clone; return the parsed raw output."""
     judge = manifest["judge"]
     validate_scoring(judge)
-    # same resolution semantics as the runner's _resolve_judge_path: ~ is
-    # expanded, relative paths resolve against the manifest's directory
+    # clone resolution: ~ is expanded; relative paths resolve against the
+    # manifest's directory (score.py's own rules, not the runner's)
     clone = Path(os.path.expanduser(judge["clone"]))
     if not clone.is_absolute():
         clone = manifest_dir / clone
