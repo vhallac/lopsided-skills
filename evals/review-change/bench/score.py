@@ -33,6 +33,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -145,7 +147,11 @@ def run_judge(manifest: dict, candidate: Path, raw_out: Path, manifest_dir: Path
     """Invoke judge.command inside judge.clone; return the parsed raw output."""
     judge = manifest["judge"]
     validate_scoring(judge)
-    clone = Path(judge["clone"])
+    # same resolution semantics as the runner's _resolve_judge_path: ~ is
+    # expanded, relative paths resolve against the manifest's directory
+    clone = Path(os.path.expanduser(judge["clone"]))
+    if not clone.is_absolute():
+        clone = manifest_dir / clone
     if not clone.is_dir():
         raise ManifestError(f"judge: clone {clone} is not a directory")
     command = judge["command"].replace("{candidate}", str(candidate)).replace("{out}", str(raw_out))
