@@ -127,6 +127,26 @@ def test_bold_bullet_before_first_field_is_not_a_field(tmp_path: Path):
     assert set(f.fields) == {"Anchor", "Evidence"}
 
 
+# claim: reportlib-SC-8/R1F1/test_method_claim_label_normalized
+# claim text: a report line written with the method's exact label
+#   "Claim / expected behavior" parses into the normalized
+#   "Claim / expected" field, not folded into a neighbor field.
+# scenario: Scenario: Method claim label — Then the long label lands in
+#   "Claim / expected" and no long-label key remains.
+def test_method_claim_label_normalized(tmp_path: Path):
+    body = (
+        "#### F1 — Minor: something\n"
+        "- **Claim / expected behavior:** the claim text\n"
+        "- **Anchor:** `src/a.py:12`\n"
+        "- **Evidence:** file\n"
+    )
+    _, findings = parse_report(_write_report(tmp_path, body))
+    (f,) = findings
+    assert f.fields["Claim / expected"] == "the claim text"
+    assert f.fields["Anchor"] == "`src/a.py:12`"
+    assert "Claim / expected behavior" not in f.fields
+
+
 # claim: reportlib-SC-5/R2F1/test_oracle_reports_differential
 # claim text: every committed oracle report still parses to its pinned shape —
 #   finding ids, severities, anchors, and full field maps are unchanged by the

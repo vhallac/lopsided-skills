@@ -26,6 +26,7 @@ PATH_RE = re.compile(r"^[\w./@+-]*[./][\w./@+-]*$")
 KNOWN_FIELDS = {
     "Anchor",
     "Claim / expected",
+    "Claim / expected behavior",
     "Existing behavior",
     "Trigger",
     "Consequence",
@@ -135,6 +136,10 @@ def parse_report(path: str) -> tuple[dict, list[Finding]]:
             # bold bullet is a continuation of the active field (or, before
             # any field has started, is skipped).
             if key in KNOWN_FIELDS:
+                # The method writes "Claim / expected behavior"; normalize to
+                # the short label so consumers see one key.
+                if key == "Claim / expected behavior":
+                    key = "Claim / expected"
                 current.fields[key] = fm2.group(2).strip()
                 active_field = key
                 continue
