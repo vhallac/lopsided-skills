@@ -69,6 +69,25 @@ def test_extract_anchor_forms():
     assert _extract_anchor("no anchor here") == (None, None, None)
 
 
+# claim: reportlib-SC-9/R1F2/test_extract_anchor_prose_fallback
+# claim text: when no backticked token resolves, `_extract_anchor` falls back
+#   to bare path-like tokens in the surrounding prose — but only tokens with a
+#   recognized source extension; slash-bearing prose words ("async/await",
+#   "3/4", "and/or") are never returned as the file.
+# scenario: Scenario: Prose anchor fallback — Then the motivating bare-path
+#   prose anchor resolves to its file with no lines, and non-path slash tokens
+#   in prose yield (None, None, None) (or, when a real path also appears, the
+#   real path wins over any non-path token).
+def test_extract_anchor_prose_fallback():
+    assert _extract_anchor(
+        "README.md, async/await example (~L496-511 at head)"
+    ) == ("README.md", None, None)
+    assert _extract_anchor("input/output handling, see src/a.ts") == ("src/a.ts", None, None)
+    assert _extract_anchor("the async/await example in the code") == (None, None, None)
+    assert _extract_anchor("a 3/4 ratio with he/she said") == (None, None, None)
+    assert _extract_anchor("and/or some words") == (None, None, None)
+
+
 # claim: reportlib-SC-3/R1F3/test_indented_bullet_continuation_is_retained
 # claim text: bulleted, indented lines inside a field value are retained as
 #   part of that field (locks the R1.F3 fix).

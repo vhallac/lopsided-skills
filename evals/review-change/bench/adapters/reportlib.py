@@ -87,7 +87,12 @@ def split_frontmatter(text: str) -> tuple[dict, str]:
 
 
 def _extract_anchor(anchor_text: str) -> tuple[str | None, int | None, int | None]:
-    """Find the first file[:line[-line]] in a backticked anchor string."""
+    """Find the first file[:line[-line]] in a backticked anchor string.
+
+    When no backticked token resolves to a path, fall back to bare path-like
+    tokens in the surrounding prose, requiring a recognized source extension
+    (a bare slash is not enough — ``async/await`` is not a path).
+    """
     candidates = BACKTICK_RE.findall(anchor_text)
     # Prefer explicit path:line, then path:line-range, then bare path.
     for tok in candidates:
@@ -106,7 +111,9 @@ def _extract_anchor(anchor_text: str) -> tuple[str | None, int | None, int | Non
     for tok in re.findall(r"[\w./@+-]*[./][\w./@+-]*", anchor_text):
         tok = tok.rstrip(".,;:)")
         if PATH_RE.match(tok) and not tok.startswith("mailbox-ext-") and " " not in tok:
-            if "/" in tok or re.search(r"\.(mjs|js|ts|tsx|py|go|java|rb|rs|md|yml|yaml|json|sh|toml)$", tok):
+            # Prose fallback: require a recognized source extension — a bare
+            # slash (e.g. "async/await", "3/4") is prose, not a path.
+            if re.search(r"\.(mjs|js|ts|tsx|py|go|java|rb|rs|md|yml|yaml|json|sh|toml)$", tok):
                 return tok, None, None
     return None, None, None
 
