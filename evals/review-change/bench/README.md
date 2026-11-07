@@ -89,7 +89,8 @@ adapters/
   to_reviewbench.py             report -> ReviewBench candidate JSON
   to_martian.py                 report -> martian candidates.json + benchmark_data.json
 materialize.py                  task manifest -> local repo at base/head + work item
-run_review.py                   materialized task -> pi --print -> report -> adapter
+run_review.py                   materialized task -> pi --print -> report -> adapter -> judge score
+score.py                        candidate + judge -> run/score.json (bench-score/1)
 tasklib.py                      review-task/1 manifest loader
 task-manifest.md                manifest format
 test_bench.py                   tests for materialize + runner
@@ -180,6 +181,78 @@ commits. `materialize.py` never contacts a forge; only the clone uses the
 network.
 
 Tests: `uv run --with pytest --with pyyaml python -m pytest evals/review-change/bench -q`.
+
+## Scoring
+
+With `judge.clone`, `judge.command`, and `judge.model` set in the manifest (all
+three together, or none — see `task-manifest.md`), `run_review.py` runs the
+judge after adaptation, so one command emits the report, the candidate, and the
+score. In `judge.command`, `{candidate}` is replaced by the candidate's path
+and `{out}` by the path the judge must write its raw JSON output to; both are
+shell-quoted so paths with spaces are safe.
+
+```sh
+python run_review.py --task /tmp/axios-10836
+# -> run/review.md, run/candidate.json, run/score.json
+```
+
+The final stdout document is a JSON summary with `report`, `candidate`,
+`score`, and `status`; a non-`scored` status makes the runner exit 1.
+
+To re-score an existing candidate (e.g. after pinning a different judge
+model), invoke `score.py` directly — it reuses the manifest's judge config and
+does not touch pi or the adapters:
+
+```sh
+python score.py --task /tmp/axios-10836 \
+    --candidate /tmp/axios-10836/run/candidate.json
+# -> /tmp/axios-10836/run/score.json
+```
+
+### `bench-score/1`
+
+Every score is written to `run/score.json` in the `bench-score/1` schema:
+
+| Field | Meaning |
+| --- | --- |
+| `schema` | Always `bench-score/1`. |
+| `benchmark` | `reviewbench` or `martian` (the manifest's `judge.adapter`). |
+| `task` | Manifest `id`. |
+| `status` | See failure semantics below. |
+| `judge_model` | The `judge.model` pin used for this score. |
+| `base`, `head` | The `judge.base`/`judge.head` SHAs the judge validates the candidate against (`null` if absent, as for martian). |
+| `precision`, `recall`, `f1` | Normalized metrics; `null` unless `status` is `scored`. |
+| `raw_output` | Path to the judge's raw output file (`run/judge-output.json`). |
+| `candidate` | Path to the candidate that was scored. |
+
+ReviewBench metrics come from the judge's `macro.overall` grounded
+precision/recall; martian metrics from `step3_judge_comments` per-PR
+precision/recall aggregation. `f1` is computed from the two when both are
+present and their sum is non-zero.
+
+### Failure semantics
+
+Failure statuses are recorded as data, never synthesized as a score of 0:
+
+- `generation-failed` — the candidate artifact is missing or not valid JSON.
+- `empty-candidate` — the candidate has a `findings` key holding an empty list
+  (a review that legitimately found nothing; not an error).
+- `judge-failed` — the judge command exited non-zero, produced no output, or
+  its output could not be normalized; the raw output (or stderr) is preserved
+  at `raw_output` for audit.
+- `scored` — the judge produced parseable output and metrics were normalized.
+
+When `run_review.py` drives the scoring, any non-`scored` status propagates to
+the summary and a non-zero exit code, so automation can tell an unscored run
+from a successful one.
+
+### Reproducibility
+
+A score is pinned to `judge.model` (recorded in every `bench-score/1` as
+`judge_model`) and to the explicit `judge.base`/`judge.head` SHAs the judge
+checks the candidate against. Re-running with the same manifest, the same
+fork clone, and the same model pin reproduces the scoring pipeline; only the
+review content itself varies between runs.
 
 ## Solution before problem
 

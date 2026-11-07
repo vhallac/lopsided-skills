@@ -37,6 +37,8 @@ JUDGE_REQUIRED = {
     "martian": ("pr_url", "golden_comments"),
 }
 
+SCORING_FIELDS = ("clone", "command", "model")
+
 DEFAULT_SKILL = BENCH_DIR.parents[2] / "skills" / "review-change"
 
 PROMPT_TEMPLATE = """Run the review-change skill on the local target below. This is a \
@@ -92,6 +94,22 @@ def validate_judge(manifest: dict) -> None:
     missing = [field for field in required if not judge.get(field)]
     if missing:
         raise ManifestError(f"judge ({name}): missing required field(s): {', '.join(missing)}")
+    validate_scoring(judge, where="judge")
+
+
+def validate_scoring(judge: dict, where: str = "judge") -> None:
+    """Scoring config is all-or-nothing: clone + command + model, all non-empty strings."""
+    present = [f for f in SCORING_FIELDS if f in judge and judge[f] not in (None, "")]
+    if not present:
+        return
+    missing = [f for f in SCORING_FIELDS if f not in present]
+    if missing:
+        raise ManifestError(
+            f"{where}: partial scoring config; missing scoring field(s): {', '.join(missing)}")
+    for field in present:
+        value = judge[field]
+        if not isinstance(value, str) or not value.strip():
+            raise ManifestError(f"{where}: scoring field {field!r} must be a non-empty string")
 
 
 def _pi_binary() -> str:
@@ -174,6 +192,28 @@ def adapt(manifest: dict, report: Path, run_dir: Path, python_cmd: list[str],
     return str(out) if name == "reviewbench" else str(data)
 
 
+
+def score_candidate(manifest: dict, task_dir: Path, candidate: Path | None, run_dir: Path,
+                    python_cmd: list[str]) -> dict | None:
+    """Run score.py on the adapted candidate; return the parsed bench-score/1 doc."""
+    judge = manifest.get("judge") or {}
+    if not candidate:
+        return None
+    if not any(f in judge for f in SCORING_FIELDS):
+        return None  # scoring config absent: adapt-only run
+    cmd = python_cmd + [
+        str(BENCH_DIR / "score.py"), "--task", str(task_dir),
+        "--candidate", str(candidate), "--out", str(run_dir),
+    ]
+    proc = subprocess.run(cmd, text=True, capture_output=True)
+    if proc.returncode != 0:
+        # score.py's own stdout duplicates score.json; surface diagnostics only
+        # on failure so the runner's summary JSON stays the last stdout document
+        sys.stderr.write(proc.stderr or proc.stdout)
+        raise SystemExit(f"error: score.py failed with exit {proc.returncode}")
+    return json.loads((run_dir / "score.json").read_text(encoding="utf-8"))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Run review-change against a materialized task.")
     ap.add_argument("--task", required=True, help="materialized task directory (holds task.json)")
@@ -184,6 +224,8 @@ def main() -> int:
     ap.add_argument("--model", help="pi model pattern")
     ap.add_argument("--timeout", type=int, default=1800, help="pi timeout in seconds")
     ap.add_argument("--no-adapt", action="store_true", help="stop at the report")
+    ap.add_argument("--no-score", action="store_true",
+                    help="stop after adaptation; skip the judge scoring step")
     ap.add_argument("--adapter-python", help="python executable that can import PyYAML")
     args = ap.parse_args()
 
@@ -223,7 +265,21 @@ def main() -> int:
         candidate = adapt(manifest, kept, run_dir, _adapter_python(args.adapter_python),
                           manifest_path.parent)
 
-    print(json.dumps({"report": str(kept), "candidate": candidate}, indent=2))
+    score_doc = None
+    if not args.no_adapt and not args.no_score:
+        score_doc = score_candidate(manifest, task_dir,
+                                    Path(candidate) if candidate else None,
+                                    run_dir, _adapter_python(args.adapter_python))
+
+    summary = {"report": str(kept), "candidate": candidate}
+    if score_doc is not None:
+        summary["score"] = str(run_dir / "score.json")
+        summary["status"] = score_doc["status"]
+    print(json.dumps(summary, indent=2))
+    # a failure status is data about the run, not a synthesized 0 — but the
+    # caller must be able to tell the run did not score
+    if score_doc is not None and score_doc["status"] != "scored":
+        return 1
     return 0
 
 

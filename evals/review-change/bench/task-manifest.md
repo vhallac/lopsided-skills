@@ -19,6 +19,9 @@ adapter for the report it produces.
   },
   "judge": {
     "adapter": "reviewbench",
+    "clone": "~/work/forks/reviewbench",
+    "command": "npm run judge -- {candidate}",
+    "model": "qwen/qwen3-coder",
     "repo": "https://github.com/axios/axios",
     "pr": 10836,
     "base": "90ae1993e0eaa39ccccbaa25957bb23cc5676df7",
@@ -49,6 +52,21 @@ adapter for the report it produces.
 The base/head in `judge` repeat the task identity the judge validates against;
 they normally equal the top-level `base`/`head`, but the full SHAs are kept
 explicit because the adapter passes them to a judge that checks them literally.
+
+Scoring fields (on `judge`):
+
+- `clone` — path to a local working copy of the judge's fork; the judge code
+  stays in its own fork, it is never vendored into the bench. `~` is expanded,
+  and a relative path resolves against the manifest's directory (this rule is
+  specific to `clone`; the top-level `source` resolves independently).
+- `command` — judge invocation template run inside `clone`; `{candidate}` is
+  replaced by the path of the candidate file to score and `{out}` by the path
+  the judge must write its raw JSON output to.
+- `model` — judge model pin, recorded in every score for reproducibility.
+
+They are configured as a set: give all three or none. A partial scoring
+config (or a non-string/empty value) is rejected with `ManifestError` by
+`run_review.validate_judge` before anything runs.
 
 ## Limitation: fetching a pinned commit by SHA
 
