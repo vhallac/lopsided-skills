@@ -101,6 +101,13 @@ def _extract_anchor(anchor_text: str) -> tuple[str | None, int | None, int | Non
         if PATH_RE.match(tok) and not tok.startswith("mailbox-ext-") and " " not in tok:
             if "/" in tok or re.search(r"\.(mjs|js|ts|tsx|py|go|java|rb|rs|md|yml|yaml|json|sh|toml)$", tok):
                 return tok, None, None
+    # Fall back to bare paths written as prose in the anchor text, outside
+    # backticks (e.g. "README.md, async/await example (~L496–511 at head)").
+    for tok in re.findall(r"[\w./@+-]*[./][\w./@+-]*", anchor_text):
+        tok = tok.rstrip(".,;:)")
+        if PATH_RE.match(tok) and not tok.startswith("mailbox-ext-") and " " not in tok:
+            if "/" in tok or re.search(r"\.(mjs|js|ts|tsx|py|go|java|rb|rs|md|yml|yaml|json|sh|toml)$", tok):
+                return tok, None, None
     return None, None, None
 
 
