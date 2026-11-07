@@ -19,6 +19,13 @@ FIELD_RE = re.compile(r"^-\s+\*\*(.+?):?\*\*\s*(.*)$")
 BACKTICK_RE = re.compile(r"`([^`]+)`")
 PATH_LINE_RE = re.compile(r"^([\w./@+-]+?):(\d+)(?:-(\d+))?$")
 PATH_RE = re.compile(r"^[\w./@+-]*[./][\w./@+-]*$")
+# Recognized source extensions for bare-path acceptance (backticked and
+# prose-fallback tokens). A bare slash is not enough — prose like
+# "async/await" or "3/4" must not resolve as a path.
+EXT_RE = re.compile(
+    r"\.(mjs|js|ts|tsx|jsx|py|go|java|rb|rs|c|h|cc|cpp|hpp|cs|php|swift|kt|"
+    r"md|yml|yaml|json|sh|toml|html|css|scss|vue|svelte|sql|xml)$"
+)
 
 # Field labels defined by the review-report/1 format. Only these start a new
 # field; any other bold bullet inside a field value is a continuation of that
@@ -104,7 +111,7 @@ def _extract_anchor(anchor_text: str) -> tuple[str | None, int | None, int | Non
         tok = tok.strip()
         # A bare path with slashes or a known source extension.
         if PATH_RE.match(tok) and not tok.startswith("mailbox-ext-") and " " not in tok:
-            if "/" in tok or re.search(r"\.(mjs|js|ts|tsx|py|go|java|rb|rs|md|yml|yaml|json|sh|toml)$", tok):
+            if "/" in tok or re.search(EXT_RE, tok):
                 return tok, None, None
     # Fall back to bare paths written as prose in the anchor text, outside
     # backticks (e.g. "README.md, async/await example (~L496–511 at head)").
@@ -113,9 +120,22 @@ def _extract_anchor(anchor_text: str) -> tuple[str | None, int | None, int | Non
         if PATH_RE.match(tok) and not tok.startswith("mailbox-ext-") and " " not in tok:
             # Prose fallback: require a recognized source extension — a bare
             # slash (e.g. "async/await", "3/4") is prose, not a path.
-            if re.search(r"\.(mjs|js|ts|tsx|py|go|java|rb|rs|md|yml|yaml|json|sh|toml)$", tok):
+            if re.search(EXT_RE, tok):
                 return tok, None, None
     return None, None, None
+
+
+def _bare_path(tok: str) -> str | None:
+    """Return tok as a bare path if it is one, else None."""
+    # Strip a trailing line hint like "(~L10)".
+    tok = re.sub(r"\s*\(~?L?\d+\)$", "", tok)
+    if PATH_RE.match(tok) and not tok.startswith("mailbox-ext-") and " " not in tok:
+        if "/" in tok or re.search(
+            r"\.(mjs|js|ts|tsx|jsx|py|go|java|rb|rs|c|h|cc|cpp|hpp|cs|php|swift|kt|md|yml|yaml|json|sh|toml|html|css|scss|vue|svelte|sql|xml)$",
+            tok,
+        ):
+            return tok
+    return None
 
 
 def parse_report(path: str) -> tuple[dict, list[Finding]]:
