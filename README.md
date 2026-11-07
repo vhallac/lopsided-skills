@@ -90,6 +90,52 @@ Exit codes: `0` success, `2` usage error, `3` rejected (semantic refusal),
 pi extension integration (the mailbox as a pi extension tool) is issue #42 and
 intentionally out of scope here.
 
+## The agent-mailbox pi extension
+
+The [agent-mailbox](pi-ext/agent-mailbox/) extension (issue
+[#42](https://github.com/vhallac/lopsided-skills/issues/42)) exposes the
+mailbox service as pi tools so an agent can delegate work to another pane and
+get the reply back as a follow-up round — no polling of the CLI by hand, no
+LLM rounds burned on waiting.
+
+Installation is covered by the `pi` manifest in `package.json` (`extensions`:
+`./pi-ext/agent-mailbox`); `pi install git:github.com/vhallac/lopsided-skills`
+installs it like the skills. The mailbox CLI (same repo, `bin: mailbox`) is
+its backing store — the extension shells out to it; see the section above for
+store location and semantics.
+
+Pane identity: the extension binds the pane name (from the `AGENT_PANE`
+environment variable, as set by pane managers such as herdr) to a stable
+session identity at session start. A pane that restarts gets a new session
+identity and never receives its predecessor's replies until an explicit
+`agent_rebind` binds the pending requests to the replacement session.
+
+Tools:
+
+| Tool | What it does |
+|---|---|
+| `agent_request` | Register + dispatch a request to a worker pane; returns a `requestId` immediately with a reply obligation. Unknown or unbound worker panes are rejected before any store mutation. |
+| `agent_wait` | Block until the reply for a `requestId` is available (bounded poll loop in the extension — no LLM rounds consumed), or return "no outcome yet" on timeout without consuming the reply. |
+| `agent_reply` | Worker side: submit a `status` (`DONE`, `NEEDS_INPUT`, `BLOCKED`, `FAILED`) and `report` for a dispatched `requestId`. Replies from an identity other than the dispatched worker are rejected. |
+| `agent_rebind` | After a pane restart, bind the pane's pending requests from the old session identity to the replacement session. |
+
+Delivery: when a reply settles while the requester is idle or between tool
+rounds, the extension starts exactly one follow-up round attributed to the
+worker as a custom (agent-attributed) message — never mid-run steering.
+Delivery is exactly-once, backed by the mailbox `consume` semantics. If a
+worker session ends without replying, the extension settles its dispatched
+requests explicitly as FAILED ("stopped without a result") — never DONE —
+leaving the request inspectable.
+
+Recovery controls (operator- and agent-facing):
+
+| Tool | What it does |
+|---|---|
+| `agent_list` | Inspect pending requests and undelivered replies. |
+| `agent_pause` | Hold automatic delivery for a request; replies become inspectable state, not lost. |
+| `agent_resume` | Release held delivery; the reply goes out on the next wait or probe. |
+| `agent_cancel` | Cancel a blocked `agent_wait` — the wait returns without a result, the request stays pending and can be waited on later. |
+
 ## Installation
 
 ### Any Agent-Skills-compatible agent (skills.sh)
@@ -110,7 +156,8 @@ pi update --extensions   # update installed packages later
 ```
 
 The repo carries a `package.json` with the `pi-package` keyword and a `pi`
-manifest pointing at `./skills`, so the pi gallery can also index it.
+manifest pointing at `./skills` and the `agent-mailbox` extension, so the pi
+gallery can also index it.
 
 ### Claude Code + OpenCode (local symlink)
 

@@ -15,6 +15,9 @@
   "pi": {
     "skills": [
       "./skills"
+    ],
+    "extensions": [
+      "./pi-ext/agent-mailbox"
     ]
   },
   "bin": {
