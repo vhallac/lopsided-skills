@@ -475,6 +475,71 @@ class ScoreTests(unittest.TestCase):
             self.assertEqual(s["status"], "scored")
             self.assertEqual((s["precision"], s["recall"], s["f1"]), (1.0, 1.0, 1.0))
 
+# claim: bench-harness-SC-16/GUAR/test_cli_skips_when_no_scoring_config
+# claim text: the standalone score.py CLI skips cleanly (exit 0, no score.json,
+#   no KeyError) when the manifest has no judge block or none of the scoring
+#   fields, mirroring the runner's adapt-only behavior.
+# scenario: Scenario: CLI skip without scoring config — When score.py runs on a manifest whose judge block is absent or carries no scoring fields Then it exits 0 with a skip message and writes no score.json instead of raising KeyError.
+    def test_cli_skips_when_no_scoring_config(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "fork").mkdir()
+            run_dir = root / "run"
+            run_dir.mkdir()
+            (run_dir / "candidate.json").write_text(
+                json.dumps({"pr": {}, "findings": [{"file": "a"}]}), encoding="utf-8")
+            for judge in (None, {"adapter": "none", "repo": "x", "pr": 1,
+                                 "base": "a", "head": "b"}):
+                manifest = {"schema": "review-task/1", "id": "score-fixture",
+                            "source": str(root / "src"), "base": "aaa", "head": "bbb"}
+                if judge is not None:
+                    manifest["judge"] = judge
+                (root / "task.json").write_text(json.dumps(manifest), encoding="utf-8")
+                r = subprocess.run(
+                    [sys.executable, str(BENCH_DIR / "score.py"), "--task", str(root)],
+                    text=True, capture_output=True,
+                )
+                self.assertEqual(r.returncode, 0, r.stderr)
+                self.assertIn("no scoring configured", r.stderr)
+                self.assertFalse((run_dir / "score.json").exists())
+
+# claim: bench-harness-SC-17/GUAR/test_partial_scoring_config_is_judge_failed
+# claim text: a judge block with some but not all scoring fields is recorded as
+#   judge-failed (ManifestError from validate_scoring), never a KeyError.
+# scenario: Scenario: Partial scoring config — When the judge block carries a command but no clone or model Then the score status is judge-failed and no exception escapes.
+    def test_partial_scoring_config_is_judge_failed(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            manifest = self._scored_manifest(root, "true")
+            for field in ("clone", "model"):
+                del manifest["judge"][field]
+            s = self._run_score(manifest, root, root / "run" / "candidate.json",
+                                {"pr": {}, "findings": [{"file": "a"}]})
+            self.assertEqual(s["status"], "judge-failed")
+
+# claim: bench-harness-SC-18/GUAR/test_unknown_adapter_rejected_cleanly
+# claim text: an unknown scoring adapter is rejected with a clear ManifestError
+#   (exit 1 on the CLI) rather than a KeyError from the normalizer lookup.
+# scenario: Scenario: Unknown adapter — When score.py runs on a manifest whose judge names an unregistered adapter with a full scoring config Then the CLI exits 1 with an unknown-adapter message and no traceback.
+    def test_unknown_adapter_rejected_cleanly(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            manifest = self._scored_manifest(root, f"cp {self.RB_RESULTS} {{out}}",
+                                             adapter="unknown-thing")
+            (root / "task.json").write_text(json.dumps(manifest), encoding="utf-8")
+            (root / "fork").mkdir()
+            run_dir = root / "run"
+            run_dir.mkdir()
+            (run_dir / "candidate.json").write_text(
+                json.dumps({"pr": {}, "findings": [{"file": "a"}]}), encoding="utf-8")
+            r = subprocess.run(
+                [sys.executable, str(BENCH_DIR / "score.py"), "--task", str(root)],
+                text=True, capture_output=True,
+            )
+            self.assertEqual(r.returncode, 1, r.stderr)
+            self.assertIn("unknown adapter", r.stderr)
+            self.assertNotIn("Traceback", r.stderr)
+
     def test_cli_writes_run_score_json(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

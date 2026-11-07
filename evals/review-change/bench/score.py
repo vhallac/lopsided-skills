@@ -41,7 +41,7 @@ from pathlib import Path
 
 BENCH_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BENCH_DIR))
-from run_review import validate_scoring  # noqa: E402
+from run_review import SCORING_FIELDS, validate_judge, validate_scoring  # noqa: E402
 from tasklib import ManifestError, load_manifest  # noqa: E402
 
 SCHEMA = "bench-score/1"
@@ -181,8 +181,17 @@ def score(manifest: dict, manifest_dir: Path, candidate: Path, run_dir: Path) ->
     if candidate_status != "ok":
         return make_score(manifest, candidate_status,
                           str(candidate) if candidate.exists() else None, None)
+    judge = manifest.get("judge") or {}
+    if not any(f in judge for f in SCORING_FIELDS):
+        # runner parity: the runner never invokes score.py without scoring
+        # config (adapt-only run); the standalone CLI skips the same way
+        print("score: no scoring configured for this task; skipping", file=sys.stderr)
+        return None
     raw_out = run_dir / "judge-output.json"
     try:
+        if (judge.get("adapter", "none")) not in NORMALIZERS:
+            raise ManifestError(
+                f"judge: unknown scoring adapter {judge.get('adapter')!r}")
         raw = run_judge(manifest, candidate, raw_out, manifest_dir)
         metrics = NORMALIZERS[(manifest.get("judge") or {}).get("adapter")](raw)
     except (RuntimeError, JudgeOutputError, ManifestError) as exc:
@@ -200,9 +209,16 @@ def main() -> int:
 
     task_dir = Path(args.task).resolve()
     manifest = load_manifest(str(task_dir / "task.json"))
+    try:
+        validate_judge(manifest)
+    except ManifestError as exc:
+        print(f"score: {exc}", file=sys.stderr)
+        return 1
     run_dir = Path(args.out).resolve() if args.out else task_dir / "run"
     candidate = Path(args.candidate).resolve() if args.candidate else run_dir / "candidate.json"
     result = score(manifest, task_dir, candidate, run_dir)
+    if result is None:
+        return 0
     out_path = run_dir / "score.json"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
