@@ -1,6 +1,6 @@
 # 016 — The agent-mailbox pi extension shells out to the mailbox CLI and keeps its own state namespaced away from the store
 
-**Status:** proposed
+**Status:** accepted
 
 ## Context
 

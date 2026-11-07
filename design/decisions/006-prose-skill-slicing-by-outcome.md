@@ -1,6 +1,6 @@
 # 006 — Prose skill sections are sliced by outcome, with a separate traceability audit unit
 
-**Status:** proposed
+**Status:** accepted
 
 ## Context
 

@@ -1,6 +1,6 @@
 # 013 — Mailbox record mutation is serialized by a per-request exclusive lock
 
-**Status:** proposed
+**Status:** accepted
 
 ## Context
 

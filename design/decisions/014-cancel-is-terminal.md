@@ -1,6 +1,6 @@
 # 014 — Cancel is terminal for a mailbox request expectation
 
-**Status:** proposed
+**Status:** accepted
 
 ## Context
 

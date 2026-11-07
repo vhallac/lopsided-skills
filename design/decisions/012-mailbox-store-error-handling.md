@@ -1,6 +1,6 @@
 # 012 — Mailbox CLI store error handling: fail-open discovery, rejected-class corruption
 
-**Status:** proposed
+**Status:** accepted
 
 ## Context
 

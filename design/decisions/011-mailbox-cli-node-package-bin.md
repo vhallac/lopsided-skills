@@ -1,6 +1,6 @@
 # 011 — The mailbox service CLI is a Node.js CLI shipped via package.json bin in this repository
 
-**Status:** proposed
+**Status:** accepted
 
 ## Context
 
