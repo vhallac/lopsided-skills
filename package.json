@@ -18,6 +18,9 @@
     ],
     "extensions": [
       "./pi-ext/agent-mailbox/index.mjs"
+    ],
+    "prompts": [
+      "./prompts"
     ]
   },
   "bin": {
