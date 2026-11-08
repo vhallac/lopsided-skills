@@ -156,6 +156,10 @@ pi install git:github.com/vhallac/lopsided-skills
 pi update --extensions   # update installed packages later
 ```
 
+pi installs the package `bin` entries on PATH: `mailbox` (the mailbox CLI)
+plus `herdr-plan-agent` and `herdr-drive` — the herdr driver wrappers used
+by the `plan-kick`/`plan-drive` prompts.
+
 The repo carries a `package.json` with the `pi-package` keyword and a `pi`
 manifest pointing at `./skills` and the `agent-mailbox` extension, so the pi
 gallery can also index it.
