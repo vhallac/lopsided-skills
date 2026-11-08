@@ -78,10 +78,12 @@ test("agent_request execute fails fast for a pane with no bound identity", async
 
 test("agent_request execute fails fast when no pane name is set", async () => {
   const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-reg-"));
-  const tool = createTools({ mailboxDir }).find((t) => t.name === "agent_request");
+  // env: {} isolates the test from the runner's own pane environment (this
+  // suite itself can run inside a herdr pane where HERDR_PANE_ID is set).
+  const tool = createTools({ mailboxDir, env: {} }).find((t) => t.name === "agent_request");
   const result = await tool.execute("tc-r1f2b", { worker: "w", instruction: "i" });
   assert.equal(result.details.error, true);
-  assert.match(result.content[0].text, /no pane name \(AGENT_PANE\) is set/);
+  assert.match(result.content[0].text, /no pane name \(AGENT_PANE\/HERDR_PANE_ID\) is set/);
 });
 
 test("agent_wait execute fails fast for a pane with no bound identity", async () => {

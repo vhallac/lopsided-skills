@@ -53,9 +53,13 @@ export async function resolvePane({ mailboxDir, paneName }) {
 
 /**
  * Best-effort pane name for this extension instance. Overridable for tests.
- * herdr sets AGENT_PANE per pane; absent that, the pane is anonymous and
- * identity binding is skipped (requester tools fail fast on unbound panes).
+ * Precedence: AGENT_PANE || HERDR_PANE_ID. herdr does not set AGENT_PANE —
+ * its documented inherited environment sets HERDR_PANE_ID per pane
+ * (#67); pane managers that do set AGENT_PANE keep working. Absent both,
+ * the pane is anonymous and identity binding is skipped (requester tools
+ * fail fast on unbound panes).
  */
 export function resolvePaneName({ env = process.env } = {}) {
-  return env.AGENT_PANE || null;
+  // `||` (not ??) so an empty-string variable counts as unset, as before.
+  return env.AGENT_PANE || env.HERDR_PANE_ID || null;
 }

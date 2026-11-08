@@ -104,9 +104,10 @@ installs it like the skills. The mailbox CLI (same repo, `bin: mailbox`) is
 its backing store — the extension shells out to it; see the section above for
 store location and semantics.
 
-Pane identity: the extension binds the pane name (from the `AGENT_PANE`
-environment variable, as set by pane managers such as herdr) to a stable
-session identity at session start. A pane that restarts gets a new session
+Pane identity: the extension binds the pane name — read from the
+`AGENT_PANE` environment variable, falling back to `HERDR_PANE_ID` (as set
+by pane managers such as herdr, which does not set `AGENT_PANE`) — to a
+stable session identity at session start. A pane that restarts gets a new session
 identity and never receives its predecessor's replies until an explicit
 `agent_rebind` binds the pending requests to the replacement session.
 

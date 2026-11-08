@@ -122,7 +122,7 @@ export async function resolveRequesterIdentity({ mailboxDir, paneName }) {
   if (!mailboxDir) throw new WaitError("mailboxDir required");
   if (!paneName) {
     throw new WaitError(
-      "requester identity required: no pane name (AGENT_PANE) is set for this pane; the agent must run in a pane that has started before it can wait",
+      "requester identity required: no pane name (AGENT_PANE/HERDR_PANE_ID) is set for this pane; the agent must run in a pane that has started before it can wait",
     );
   }
   const own = await resolvePane({ mailboxDir, paneName });
