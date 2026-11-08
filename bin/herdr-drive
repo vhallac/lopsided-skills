@@ -1,0 +1,98 @@
+#!/bin/sh
+# herdr-drive — mechanical drive loop for a herdr plan agent.
+#
+# Submits plan units one at a time, reads only the report tail (~20 lines),
+# gates on the status line, and prints a one-line ledger per unit. Escalates
+# (nonzero exit) on NEEDS_INPUT/BLOCKED/FAILED, a DONE with open issues, an
+# unparseable report, or a failed submission — the LLM orchestrator handles
+# only escalations, never the per-unit relay.
+#
+# Usage:
+#   herdr-drive --agent NAME --issue NN --plan PATH U1 [U2 ...]
+#
+# Exit codes:
+#   0  all listed units done and clean
+#   1  escalation (gate stop) — report tail printed after ESCALATE line
+#   2  usage error
+
+set -u
+
+AGENT=""
+ISSUE=""
+PLAN=""
+
+usage() { echo "usage: herdr-drive --agent NAME --issue NN --plan PATH U1 [U2 ...]" >&2; exit 2; }
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --agent) AGENT="$2"; shift 2 ;;
+    --issue) ISSUE="$2"; shift 2 ;;
+    --plan)  PLAN="$2";  shift 2 ;;
+    -*) usage ;;
+    *) break ;;
+  esac
+done
+
+[ -n "$AGENT" ] && [ -n "$ISSUE" ] && [ -n "$PLAN" ] || usage
+[ $# -ge 1 ] || usage
+
+# extract_report_tail [lines] — print the agent's recent output tail.
+read_tail() {
+  _lines="$1"
+  herdr agent read "$AGENT" --source recent --lines "$_lines" 2>/dev/null
+}
+
+# gate UNIT — read the tail, gate on status. Echoes ledger line on DONE,
+# prints "ESCALATE <status>" + tail and returns 1 otherwise.
+gate() {
+  _unit="$1"
+  _tail=""
+  _lines=20
+  _max=120
+
+  # Find the smallest tail that captures a status line; expand upward.
+  while :; do
+    _tail="$(read_tail "$_lines")" || _tail=""
+    if printf '%s\n' "$_tail" | grep -qE '^Status: (DONE|NEEDS_INPUT|BLOCKED|FAILED)[[:space:]]*$'; then
+      break
+    fi
+    if [ "$_lines" -ge "$_max" ]; then
+      echo "ESCALATE UNPARSEABLE (no status line in last ${_max} lines)"
+      printf '%s\n' "$_tail"
+      return 1
+    fi
+    if [ "$_lines" -lt 60 ]; then _lines=60; else _lines=120; fi
+  done
+
+  _status="$(printf '%s\n' "$_tail" | grep -E '^Status: ' | tail -n 1 | sed 's/^Status: *//')"
+
+  case "$_status" in
+    DONE)
+      _issues="$(printf '%s\n' "$_tail" | sed -n '/^Open Issues:/,/^$/p')"
+      if printf '%s\n' "$_issues" | grep -qiE '(^|[,:[:space:]])none([,.:[:space:]]|$)'; then
+        echo "unit ${_unit}: DONE"
+        return 0
+      fi
+      echo "ESCALATE DONE-with-open-issues (${_unit})"
+      printf '%s\n' "$_tail"
+      return 1
+      ;;
+    *)
+      echo "ESCALATE ${_status} (${_unit})"
+      printf '%s\n' "$_tail"
+      return 1
+      ;;
+  esac
+}
+
+for unit in "$@"; do
+  msg="Execute unit ${unit} of the plan for issue #${ISSUE} in ${PLAN}, then report per the completion report format."
+  if ! herdr agent prompt "$AGENT" "$msg" --wait >/dev/null 2>&1; then
+    echo "ESCALATE SUBMIT-FAILED (${unit})"
+    herdr agent read "$AGENT" --source recent --lines 20 2>/dev/null || true
+    exit 1
+  fi
+  gate "$unit" || exit 1
+done
+
+exit 0
