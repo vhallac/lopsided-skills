@@ -61,7 +61,7 @@ function requestExecute(options) {
         const paneName = options.paneName ?? resolvePaneName(options);
         if (!paneName) {
           throw new RequestError(
-            "requester identity required: no pane name (AGENT_PANE) is set for this pane; the agent must run in a pane that has started before it can request",
+            "requester identity required: no pane name (AGENT_PANE/HERDR_PANE_ID) is set for this pane; the agent must run in a pane that has started before it can request",
           );
         }
         const own = await resolvePane({ mailboxDir, paneName });

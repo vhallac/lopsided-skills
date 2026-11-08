@@ -55,7 +55,9 @@ try {
   panes.push(a, b);
   console.log(`LIVE-PANES requester=${a} worker=${b}`);
 
-  const env = (pane) => `MAILBOX_DIR=${mailboxDir} AGENT_PANE=${pane}`;
+  // HERDR_PANE_ID is what a real herdr pane inherits (#67); injecting it
+  // exercises the extension's fallback instead of the AGENT_PANE override.
+  const env = (pane) => `MAILBOX_DIR=${mailboxDir} HERDR_PANE_ID=${pane}`;
   await herdr([
     "pane", "run", b,
     `cd ${repoRoot} && ${env(b)} LIVE_WORKER_PANE=${a} node pi-ext/scripts/live-worker.mjs > ${logsDir}/worker.log 2>&1`,

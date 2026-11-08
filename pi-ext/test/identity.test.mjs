@@ -58,6 +58,18 @@ test("resolvePaneName reads AGENT_PANE from env", () => {
   assert.equal(resolvePaneName({ env: {} }), null);
 });
 
+// #67: herdr panes do not set AGENT_PANE; the documented inherited
+// environment sets HERDR_PANE_ID. AGENT_PANE keeps precedence when a pane
+// manager does provide it.
+test("resolvePaneName falls back to HERDR_PANE_ID when AGENT_PANE is absent", () => {
+  assert.equal(resolvePaneName({ env: { HERDR_PANE_ID: "pane-abc" } }), "pane-abc");
+  assert.equal(
+    resolvePaneName({ env: { AGENT_PANE: "override", HERDR_PANE_ID: "pane-abc" } }),
+    "override"
+  );
+  assert.equal(resolvePaneName({ env: { HERDR_PANE_ID: "" } }), null);
+});
+
 // ---- unit-007: session identity, pane-name reuse, and explicit rebind ----
 
 import { recordReplacement, rebindRequester, rebindPaneRequests, latestReplacement } from "../agent-mailbox/rebind.mjs";
