@@ -117,16 +117,24 @@ forward one unit at a time, and to apply the completion gate strictly.
 ## Interrupted batches and operator intervention
 
 When resuming a drive session (operator cancel/pause/rebind, or a fresh
-session taking over), do not assume which units are outstanding:
+session taking over), do not assume which units are outstanding. Rebind
+FIRST: the pane's session identity may have been replaced, and while this
+session runs under a stale identity no pending reply addressed to it is
+reachable — `agent_wait` would block forever on outcomes it can never
+consume.
 
-1. `agent_list` shows every pending request with its state and whether a
+1. Call `agent_rebind` for this pane before anything else. If the rebind
+   fails, stop and escalate: outstanding requests cannot be consumed until
+   it succeeds. Do not skip to `agent_list`/`agent_wait` on a failed
+   rebind.
+2. `agent_list` shows every pending request with its state and whether a
    reply is waiting. Reconcile it against the plan's unit list and your
    ledger.
-2. Re-arm `agent_wait` on any request that already has a reply waiting
+3. Re-arm `agent_wait` on any request that already has a reply waiting
    (consume it, gate on it). Requests still pending with no reply are
    re-waited, not re-dispatched — re-dispatching would run the unit twice.
-3. Only units with no live request and no recorded outcome are dispatched
-   fresh.
+4. Only units with no live request and no recorded outcome are dispatched
+   fresh (via the dispatch + delivery steps of the drive loop).
 
 ## Mechanical drive via `herdr-drive` (preferred for simple plans)
 
