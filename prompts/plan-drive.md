@@ -89,9 +89,14 @@ forward one unit at a time, and to apply the completion gate strictly.
      `agent_wait` on the same `requestId`. Re-arming a correlated wait is not
      state polling; do not insert sleeps between re-arms. If a re-arm also
      times out with no progress across two consecutive waits, escalate.
-   - If the wait resolves "stopped without a result" (cancelled, e.g. the
-     wait was interrupted), the request stays pending — treat the unit as
-     blocked, not done, and surface the intervention point to the operator.
+   - Distinguish the two non-reply outcomes — they need opposite handling:
+     - **Cancelled wait** (the wait itself was interrupted/cancelled):
+       nothing was consumed and the request is still pending. Re-arm
+       `agent_wait` on the same `requestId` — the unit is not blocked, the
+       outcome just has not been picked up.
+     - **Settled without a result** (the outcome was consumed and it
+       carries no usable reply): that is a FAILED outcome — handle it in
+       the step-3 FAILED gate, do not re-arm the wait.
    - The reply's `report` is the completion report; you do not need
      `herdr agent read` for gating. Use a single `herdr agent read
      <agent name> --source recent --lines 60` only as a diagnostic when the
