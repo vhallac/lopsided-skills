@@ -20,6 +20,9 @@ extension-only state (the pane → session identity bindings) lives.
   The namespace subdirectory keeps extension state out of the store root, so
   the CLI never sees it as request state. Pane name source is `AGENT_PANE`;
   a pane without it is anonymous and cannot dispatch or reply (fail-fast).
+  Amendment (issue #43 / #67): the source is `AGENT_PANE || HERDR_PANE_ID`
+  (empty string counts as unset) so herdr panes — which set only
+  `HERDR_PANE_ID` — are no longer anonymous.
 - **Blocking waits are extension-internal.** `agent_wait` is a bounded
   subprocess poll loop on `mailbox show` (read-only) — never an LLM round —
   and consumes via `mailbox consume`, inheriting exactly-once (decision 012
