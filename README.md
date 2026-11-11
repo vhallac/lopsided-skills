@@ -160,6 +160,12 @@ pi installs the package `bin` entries on PATH: `mailbox` (the mailbox CLI)
 plus `herdr-plan-agent` and `herdr-drive` — the herdr driver wrappers used
 by the `plan-kick`/`plan-drive` prompts.
 
+The package also publishes two prompts (under `prompts/`, via the `pi`
+manifest's `pi.prompts`): `/plan-kick` kicks off a herdr plan agent and has
+it construct a review-gated plan for an issue, and `/plan-drive` drives that
+agent unit by unit over correlated mailbox requests. After installing, the
+driver prompts are available as slash commands in your pi session.
+
 The repo carries a `package.json` with the `pi-package` keyword and a `pi`
 manifest pointing at `./skills` and the `agent-mailbox` extension, so the pi
 gallery can also index it.
@@ -178,7 +184,9 @@ One symlink feeds both agents; the repo stays the single source of truth.
 ## Status
 
 Early days: these skills are working drafts in daily use. More will follow in
-a proper project structure. Expect churn.
+a proper project structure. Expect churn. The published prompts `/plan-kick`
+and `/plan-drive` drive herdr plan agents over the agent-mailbox extension;
+they are new and expect churn too.
 
 ## License
 
