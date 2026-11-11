@@ -1,9 +1,13 @@
 ---
 description: Drive one or more herdr plan agents through plan execution — request, wait, gate
-argument-hint: "<agent-name> [-- directives]"
+argument-hint: "<agent-pane-id> [-- directives]"
 ---
 
-Drive the herdr agent(s): $1 (or the agents named before `--`).
+Drive the herdr agent(s): $1 is the agent's **pane id** (or pane ids before
+`--`) — the identity the mailbox tools address, resolved from the agent name
+by /plan-kick. For `herdr` CLI commands, which take the agent name, resolve
+the name once per session: `herdr agent list` and look up the entry whose
+`pane_id` matches the pane id.
 
 Anything after `--` in the arguments is an operator directive. Carry it as a
 standing constraint for this drive session: quote it exactly when relaying to
@@ -31,9 +35,11 @@ memory:
    source of truth — do NOT spend an agent round asking the agent for its
    binding.
 2. Only if the plan cannot be located or its header names no issue, ask the
-   agent once via a correlated request (`agent_request` to the worker: "Report
-   the plan file path you are executing and the issue number it belongs to.
-   Do not start any work." then `agent_wait` on the returned `requestId`). If
+   agent once via a correlated request (`agent_request` to the worker pane id,
+   then deliver the question to the pane via a single blocking
+   `herdr agent prompt` carrying the question, the returned `requestId`, and
+   the obligation to answer via `agent_reply(requestId, ...)`, then
+   `agent_wait` on that `requestId`). If
    even then the plan and the agent disagree, or no issue is named, that is a
    `BLOCKED` gate condition — surface it and stop; do not guess a number.
 3. Record `issue #NN`, the plan path, and the agent's PR (if one exists yet)
@@ -48,16 +54,33 @@ forward one unit at a time, and to apply the completion gate strictly.
 ## The drive loop (per agent, repeat)
 
 1. **Dispatch the next unit as a correlated request**: `agent_request` with
-   worker `<agent name>` and message:
+   worker set to the pane id `$1` and message:
    "Execute unit U<n> of the plan for issue #NN in <plan path>, then report
    per the completion report format." (The unit names come from the plan's
    unit list, in order, skipping completed ones. Keep the message minimal.)
    - The tool returns a `requestId`. Record it against the unit in your
      ledger.
+   - `agent_request` only registers and settles the request in the mailbox
+     — it does NOT put the instruction in front of the agent. Deliver it
+     yourself, in the same step, via a single blocking prompt to the pane:
+
+     herdr agent prompt $1 -- "Request <requestId>: Execute unit U<n> of
+     the plan for issue #NN in <plan path>, then report per the completion
+     report format. You MUST answer this request via agent_reply(requestId,
+     ...) with your status (DONE | NEEDS_INPUT | BLOCKED | FAILED) and
+     report. Do not answer any other way."
+
+     The delivered message MUST carry all three parts: (a) the unit
+     instruction text, (b) the `requestId`, (c) the explicit obligation to
+     respond with `agent_reply(requestId, ...)`.
+
+     This `herdr agent prompt` is delivery only — a single blocking call.
+     Never use `herdr agent prompt` as a wait/polling mechanism; blocking
+     on the outcome is `agent_wait` on the `requestId` below.
    - If `agent_request` fails (worker unreachable, dispatch error), the unit
      fails for this round: record the failure against the unit and escalate
-     to the operator. Do NOT fall back to `herdr agent prompt` with
-     sleep-and-recheck loops.
+     to the operator. Do NOT fall back to repeated `herdr agent prompt`
+     calls with sleep-and-recheck loops.
 2. **Wait on the request**: `agent_wait` on the `requestId` with a generous
    `timeoutMs` (a unit takes minutes; use 900000). The wait resolves with the
    worker's reply: its `status` is the completion-report status (`DONE |
@@ -71,7 +94,8 @@ forward one unit at a time, and to apply the completion gate strictly.
      blocked, not done, and surface the intervention point to the operator.
    - The reply's `report` is the completion report; you do not need
      `herdr agent read` for gating. Use a single `herdr agent read
-     <name> --source recent --lines 60` only as a diagnostic when the report
+     <agent name> --source recent --lines 60` only as a diagnostic when the
+     report
      is empty or unparsable — never as a polling loop.
 3. **Gate on the status**:
    - `DONE` and no open issues in the report → mark that unit complete,
@@ -109,7 +133,7 @@ session taking over), do not assume which units are outstanding:
 For plans whose units need no operator judgment between gates, run the
 mechanical loop script instead of relaying unit by unit yourself:
 
-    herdr-drive --agent <name> --issue <NN> --plan <plan-path> U1 U2 ... U<n>
+    herdr-drive --agent <agent name> --issue <NN> --plan <plan-path> U1 U2 ... U<n>
 
 (pass the remaining unit ids in order). The script submits each unit, reads
 only the report tail, gates on the status line, and prints a one-line ledger
