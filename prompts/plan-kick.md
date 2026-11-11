@@ -1,5 +1,5 @@
 ---
-description: Kick off a herdr plan agent and have it construct a plan for an issue (no execution)
+description: Kick off a herdr plan agent and have it construct a plan for an issue
 argument-hint: "<agent-name> <issue-ref> [-- directives]"
 ---
 
@@ -23,10 +23,10 @@ do not degrade to sleep-based or pane-state polling.
 1. Start (or reuse) the agent, spawning it idle — do NOT submit the kickoff
    prompt through the script:
 
-   herdr-plan-agent $1 --cwd .
+   herdr-plan-agent $1
 
-   (No --cwd override: the script defaults to its own $PWD, which is this
-   session's cwd = the project root. No prompt argument here: the kickoff
+   (No --cwd override and no prompt argument: the wrapper runs the agent in
+   its own $PWD, which is this session's cwd = the project root. The kickoff
    message is registered in step 2 and then DELIVERED to the pane in a
    single follow-up `herdr agent prompt` — see step 2. Delivery is one
    shot, never a sleep-and-recheck loop.)
@@ -37,7 +37,8 @@ do not degrade to sleep-based or pane-state polling.
    review-gated plan written to disk under `.todo/` in the agent's cwd
    (`.todo` is gitignored — NEVER `git add`/`git commit` it). The plan header
    MUST carry the issue reference. On completion the agent reports the plan
-   file path and the issue number, and stops — no execution.
+   file path, the issue number, and the number of units in the plan (for the
+   small path: a `solved directly` report instead), and stops.
 
 2. Resolve the worker's pane id, then dispatch the kickoff as a correlated
    request and block on its outcome:
@@ -81,7 +82,8 @@ do not degrade to sleep-based or pane-state polling.
 3. Gate on the reply's status:
 
    - `DONE` → report back to the operator: agent name, issue, plan path,
-     number of units (parse them from the report).
+     number of units (parse them from the report; for a solved-directly
+     small issue, report that the issue was closed directly).
    - `NEEDS_INPUT` or `BLOCKED` → surface the agent's questions verbatim and
      stop. Do not attempt to answer on the operator's behalf, and do not
      start execution.
