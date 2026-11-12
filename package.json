@@ -17,7 +17,7 @@
       "./skills"
     ],
     "extensions": [
-      "./pi-ext/agent-mailbox"
+      "./pi-ext/agent-mailbox/index.mjs"
     ]
   },
   "bin": {
