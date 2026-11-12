@@ -52,12 +52,13 @@ if herdr agent get "$NAME" >/dev/null 2>&1; then
 else
   if [ -z "$PANE" ]; then
     if [ -z "$TAB" ]; then
+      # POSIX sh has no arrays; build the optional workspace arg as a single
+      # word-split string and pass it only when non-empty.
+      ws_arg=""
       if [ -n "$WORKSPACE" ]; then
-        WS_ARGS=(--workspace "$WORKSPACE")
-      else
-        WS_ARGS=()
+        ws_arg="--workspace $WORKSPACE"
       fi
-      TAB="$({ herdr tab create --cwd "$CWD" --label "$NAME" "${WS_ARGS[@]}"; } | sed -n 's/.*"tab_id":"\([^"]*\)".*/\1/p')"
+      TAB="$({ herdr tab create --cwd "$CWD" --label "$NAME" $ws_arg; } | sed -n 's/.*"tab_id":"\([^"]*\)".*/\1/p')"
       [ -n "$TAB" ] || { echo "failed to create tab" >&2; exit 1; }
       echo "created tab $TAB"
     fi
