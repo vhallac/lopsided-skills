@@ -21,7 +21,10 @@ Requires the agent-mailbox pi extension in this session (`agent_request`,
 do not degrade to sleep-based or pane-state polling.
 
 1. Start (or reuse) the agent, spawning it idle — do NOT submit the kickoff
-   prompt through the script:
+   prompt through the script. Precondition: the `herdr-plan-agent` wrapper
+   must be on PATH (the pi install does not put package `bin` entries there —
+   see the README Installation section); if it is not found, report
+   NEEDS_INPUT saying so.
 
    herdr-plan-agent $1
 

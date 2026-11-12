@@ -156,9 +156,14 @@ pi install git:github.com/vhallac/lopsided-skills
 pi update --extensions   # update installed packages later
 ```
 
-pi installs the package `bin` entries on PATH: `mailbox` (the mailbox CLI)
-plus `herdr-plan-agent` and `herdr-drive` — the herdr driver wrappers used
-by the `plan-kick`/`plan-drive` prompts.
+The package `bin` entries — `mailbox` (the mailbox CLI) plus
+`herdr-plan-agent` and `herdr-drive`, the herdr driver wrappers used by the
+`plan-kick`/`plan-drive` prompts — are **not** put on PATH by the pi install.
+To make them invocable from a shell, install the package globally
+(`npm i -g github:vhallac/lopsided-skills`) or symlink/copy the scripts from
+the installed package's `bin/` directory into a directory on your `PATH`.
+Assume they are on PATH in the following prompts; each driver prompt states
+this precondition where its wrapper is invoked.
 
 The package also publishes two prompts (under `prompts/`, via the `pi`
 manifest's `pi.prompts`): `/plan-kick` kicks off a herdr plan agent and has
