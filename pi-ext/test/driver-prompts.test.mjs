@@ -69,11 +69,11 @@ test("C1: manager-specific commands occur only in the manager-resolution block",
  * Claim block (issue #70 / PR #66 review R3.F1, R3.F2):
  *   claim id: driver-prompts-C2/hc-identity-at-spawn
  *   claim: the hc start/reuse op binds the mailbox identity at spawn
- *     (--name <pane-name> plus AGENT_PANE=<pane-name>), so the address map
- *     resolves the same pane name as the mailbox identity
+ *     (--name <pane-name>, AGENT_PANE=<pane-name> and MAILBOX_DIR=<mailbox-store>),
+ *     so the address map resolves the same pane name as the mailbox identity
  *   scenario: Given the hc rows of the manager-resolution table
  *     Then the start/reuse cell spawns with --name <pane-name> and
- *       env AGENT_PANE=<pane-name> pi
+ *       env AGENT_PANE=<pane-name> MAILBOX_DIR=<mailbox-store> pi
  *     And the address-map cell resolves <pane-name> as the mailbox identity
  */
 test("C2: the hc worker gets its mailbox identity at spawn", () => {
@@ -83,7 +83,7 @@ test("C2: the hc worker gets its mailbox identity at spawn", () => {
   const hcStart = startRow.split("|")[2]?.trim() ?? "";
   assert.match(hcStart, /\bhc run\b/);
   assert.match(hcStart, /--name <pane-name>/);
-  assert.match(hcStart, /env AGENT_PANE=<pane-name> pi/);
+  assert.match(hcStart, /env AGENT_PANE=<pane-name> MAILBOX_DIR=<mailbox-store> pi/);
 
   const addressRow = block.find((line) => line.startsWith("| address map"));
   assert.ok(addressRow, "plan-kick.md has an address-map row");

@@ -38,10 +38,15 @@ manager commands:
 
 | Neutral op | hc binding | herdr binding |
 |---|---|---|
-| start/reuse worker | `hc run --bg --cwd <project-root> --name <pane-name> env AGENT_PANE=<pane-name> pi` (start; reuse when `hc ls --json` already shows that name) | `herdr-plan-agent <name>` wrapper (starts or reuses the existing agent); the wrapper must be on PATH — the pi install does not put package `bin` entries there (see README Installation section); if not found, report NEEDS_INPUT saying so |
+| start/reuse worker | `hc run --bg --cwd <project-root> --name <pane-name> env AGENT_PANE=<pane-name> MAILBOX_DIR=<mailbox-store> pi` (start; reuse when `hc ls --json` already shows that name) | `herdr-plan-agent <name>` wrapper (starts or reuses the existing agent); the wrapper must be on PATH — the pi install does not put package `bin` entries there (see README Installation section); if not found, report NEEDS_INPUT saying so |
 | address map (agent name → mailbox identity + pane address) | `hc ls --json` → the terminal whose name is `<pane-name>`; that name is the mailbox identity, its id (e.g. `t12`) is the pane address | `herdr agent get <name>` → its `pane_id` is both the mailbox identity and the pane address |
 | deliver message | `hc send <pane-name> "<text>"` (non-blocking paste + enter; accepts a terminal address or a name) | `herdr agent prompt <name> -- "<text>"` (delivery only — never pass `--wait`, never use it as a wait) |
 | read pane tail | `hc read <pane-name>` | `herdr agent read <name> --source recent --lines N` |
+
+`<mailbox-store>` is the store the mailbox CLI itself resolves: `$MAILBOX_DIR`
+when it is set, otherwise the CLI default (`~/.local/share/mailbox`). Pass the
+same store the invoking session uses so the worker binds where requests are
+dispatched.
 
 Wait is not a manager operation: the only wait anywhere in this prompt is
 `agent_wait` on a concrete `requestId`.

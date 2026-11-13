@@ -3,6 +3,7 @@
 // outcomes (unit-003); agent_wait blocks on the outcome without consuming
 // LLM rounds (unit-004). The mailbox CLI (decision 011: one package, bin
 // shared) is invoked as a subprocess.
+import { storeDir } from "../../mailbox/lib/store.mjs";
 import { resolvePaneName, bindPane, resolvePane, loadBindings } from "./identity.mjs";
 import { recordReplacement, rebindPaneRequests } from "./rebind.mjs";
 import { dispatchRequest, RequestError } from "./request.mjs";
@@ -54,7 +55,7 @@ export { waitForOutcome, WaitError };
  */
 function requestExecute(options) {
   return async (_toolCallId, params) => {
-    const mailboxDir = options.mailboxDir ?? process.env.MAILBOX_DIR;
+    const mailboxDir = options.mailboxDir ?? storeDir();
     try {
       let requesterIdentity = options.requesterIdentity;
       if (!requesterIdentity && mailboxDir) {
@@ -101,7 +102,7 @@ function requestExecute(options) {
  */
 function replyExecute(options) {
   return async (_toolCallId, params) => {
-    const mailboxDir = options.mailboxDir ?? process.env.MAILBOX_DIR;
+    const mailboxDir = options.mailboxDir ?? storeDir();
     try {
       const { workerIdentity } = await replyOutcome({
         mailboxDir,
@@ -133,7 +134,7 @@ function replyExecute(options) {
  */
 function waitExecute(options) {
   return async (_toolCallId, params) => {
-    const mailboxDir = options.mailboxDir ?? process.env.MAILBOX_DIR;
+    const mailboxDir = options.mailboxDir ?? storeDir();
     try {
       const paneName = options.paneName ?? resolvePaneName(options);
       const requesterIdentity =
@@ -215,7 +216,7 @@ function waitErrorResult(message) {
  */
 function rebindExecute(options) {
   return async (_toolCallId, params) => {
-    const mailboxDir = options.mailboxDir ?? process.env.MAILBOX_DIR;
+    const mailboxDir = options.mailboxDir ?? storeDir();
     try {
       const paneName = params.pane ?? options.paneName ?? resolvePaneName(options);
       if (!paneName) throw new Error("pane name required (param `pane`, AGENT_PANE, or HERDR_PANE_ID)");
@@ -261,7 +262,7 @@ function rebindExecute(options) {
  */
 function recoveryExecute(options, { tool, run }) {
   return async (_toolCallId, params) => {
-    const mailboxDir = options.mailboxDir ?? process.env.MAILBOX_DIR;
+    const mailboxDir = options.mailboxDir ?? storeDir();
     try {
       return await run({ mailboxDir, params });
     } catch (err) {
@@ -502,7 +503,7 @@ export function createTools(options = {}) {
  * later units can resolve requester/worker identities per pane.
  */
 export default function agentMailboxExtension(pi, options = {}) {
-  const mailboxDir = options.mailboxDir ?? process.env.MAILBOX_DIR;
+  const mailboxDir = options.mailboxDir ?? storeDir();
   for (const tool of createTools(options)) {
     pi.registerTool(tool);
   }

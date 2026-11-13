@@ -8,7 +8,7 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -325,7 +325,12 @@ test("agent_cancel with no blocked wait is a clean no-op", async () => {
 });
 
 test("agent_list surfaces mailbox failures as tool errors", async () => {
-  const tool = toolByName(createTools({}), "agent_list");
+  // The extension now defaults to the CLI store, so force a store failure
+  // with a path whose parent is a regular file (ENOTDIR).
+  const root = await mkdtemp(join(tmpdir(), "agent-mailbox-bad-store-"));
+  const file = join(root, "not-a-dir");
+  await writeFile(file, "");
+  const tool = toolByName(createTools({ mailboxDir: join(file, "store") }), "agent_list");
   const result = await tool.execute("call-1", {});
   assert.equal(result.details.error, true);
 });
