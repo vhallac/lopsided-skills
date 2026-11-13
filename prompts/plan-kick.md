@@ -6,10 +6,13 @@ argument-hint: "<agent-name> <issue-ref> [-- directives]"
 The plan is always built from the project root: the cwd of the session
 invoking this prompt is the project root and must be the agent pane's cwd.
 
-`$1` is the agent name. Correlated requests address the agent's **pane id**,
-not the agent name: before dispatching, resolve the pane id once (step 2)
-and use it as the `worker` identity for `agent_request` and when handing off
-to /plan-drive.
+`$1` is the agent name. The worker's mailbox identity is bound at spawn:
+for `hc` it is the `--name <pane-name>` value (the agent name itself, which
+must fit the manager's `--name` charset); for `herdr` it is the pane id.
+Resolve that identity and the pane address once (step 2) and use the
+identity as the `worker` for `agent_request` and when handing off to
+/plan-drive. If `$1` does not fit the manager's `--name` charset, report
+NEEDS_INPUT — never mangle the name.
 
 Kick off and plan: agent $1, issue $2. Anything after `--` is an operator
 directive: pass it to the agent verbatim as additional context alongside the
@@ -35,23 +38,21 @@ manager commands:
 
 | Neutral op | hc binding | herdr binding |
 |---|---|---|
-| start/reuse worker | `hc run pi ... --bg` (start; reuse when `hc ls --json` already shows the labeled terminal) | `herdr-plan-agent <name>` wrapper (starts or reuses the existing agent) |
-| address map (agent name → pane address) | `hc ls --json` → the terminal labeled/paired with the agent name; its id is the pane address | `herdr agent get <name>` → parse `pane_id` from its JSON |
-| deliver message | `hc send <pane-address> "<text>"` (non-blocking paste + enter) | `herdr agent prompt <name> -- "<text>"` (delivery only — never pass `--wait`, never use it as a wait) |
-| read pane tail | `hc read <pane-address>` | `herdr agent read <name> --source recent --lines N` |
+| start/reuse worker | `hc run --bg --cwd <project-root> --name <pane-name> env AGENT_PANE=<pane-name> pi` (start; reuse when `hc ls --json` already shows that name) | `herdr-plan-agent <name>` wrapper (starts or reuses the existing agent); the wrapper must be on PATH — the pi install does not put package `bin` entries there (see README Installation section); if not found, report NEEDS_INPUT saying so |
+| address map (agent name → mailbox identity + pane address) | `hc ls --json` → the terminal whose name is `<pane-name>`; that name is the mailbox identity, its id (e.g. `t12`) is the pane address | `herdr agent get <name>` → its `pane_id` is both the mailbox identity and the pane address |
+| deliver message | `hc send <pane-name> "<text>"` (non-blocking paste + enter; accepts a terminal address or a name) | `herdr agent prompt <name> -- "<text>"` (delivery only — never pass `--wait`, never use it as a wait) |
+| read pane tail | `hc read <pane-name>` | `herdr agent read <name> --source recent --lines N` |
 
 Wait is not a manager operation: the only wait anywhere in this prompt is
 `agent_wait` on a concrete `requestId`.
 
 ## Steps
 
-1. **Start (or reuse) the worker** — spawn it idle; do NOT submit the kickoff
-   prompt through the start operation. For `hc`, the `herdr-plan-agent`
-   wrapper precondition does not apply; for `herdr`, the wrapper must be on
-   PATH (the pi install does not put package `bin` entries there — see the
-   README Installation section); if it is not found, report NEEDS_INPUT
-   saying so. No `--cwd` override and no prompt argument: the worker runs in
-   this session's cwd = the project root.
+1. **Start (or reuse) the worker** — spawn it idle via the start/reuse op;
+   do NOT submit the kickoff prompt through the start operation. The op's
+   manager-specific form and preconditions live in the resolution table
+   above. No prompt argument: the worker runs in this session's cwd = the
+   project root.
 
    Build the kickoff message inline: it must instruct the agent to load issue
    $2 (plus any extra context), run the `plan-work` skill, and follow its
@@ -62,16 +63,17 @@ Wait is not a manager operation: the only wait anywhere in this prompt is
    file path, the issue number, and the number of units in the plan (for the
    small path: a `solved directly` report instead), and stops.
 
-2. **Resolve the pane address, then dispatch the kickoff as a correlated
-   request and block on its outcome:**
+2. **Resolve the worker identity and pane address, then dispatch the kickoff
+   as a correlated request and block on its outcome:**
 
-   - Resolve the pane address for agent `$1` via the address-map op. This
-     address is what the extension bound the agent's session identity under;
-     the agent name alone is NOT a valid `agent_request` worker. If the
-     agent has no pane address (not started), report the failure and stop.
-   - `agent_request` with worker set to the resolved **pane address** and the
-     kickoff message → returns a `requestId`. If the request fails (worker
-     unreachable), report the failure and stop.
+   - Use the address-map op for agent `$1`. The mailbox identity — the value
+     the extension bound the agent's session under — is the pane name for
+     `hc` and the pane id for `herdr`; the pane address is the terminal
+     address used by deliver/read. If the agent has no entry (not started),
+     report the failure and stop.
+   - `agent_request` with worker set to the resolved **mailbox identity** and
+     the kickoff message → returns a `requestId`. If the request fails
+     (worker unreachable), report the failure and stop.
 
      `agent_request` only registers and settles the request in the mailbox
      — it does NOT put the message in front of the agent. Delivery is your
@@ -113,4 +115,5 @@ Wait is not a manager operation: the only wait anywhere in this prompt is
 This prompt ends at plan construction for the larger path; a small issue
 may be solved directly and reported. Execution of a produced plan is driven
 by /plan-drive —
-pass it the resolved pane address (not the agent name) as its argument.
+pass it the resolved mailbox identity (not the agent name alone) as its
+argument.

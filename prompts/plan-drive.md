@@ -3,9 +3,10 @@ description: Drive one or more plan agents through plan execution — request, w
 argument-hint: "<agent-pane-id> [-- directives]"
 ---
 
-Drive the plan agent(s): $1 is the agent's **pane id** (or pane ids before
-`--`) — the identity the mailbox tools address, resolved from the agent name
-by /plan-kick.
+Drive the plan agent(s): $1 is the agent's **mailbox identity** (or mailbox
+identities before `--`) — the pane name for `hc`, the pane id for `herdr`,
+resolved from the agent name by /plan-kick. It is the identity the mailbox
+tools address.
 
 Anything after `--` in the arguments is an operator directive. Carry it as a
 standing constraint for this drive session: quote it exactly when relaying to
@@ -41,16 +42,16 @@ availability and do NOT re-resolve later in the prompt:
 
 Bind the neutral operations to the resolved manager's commands. Outside this
 block the prompt refers only to the neutral op names — never to concrete
-manager commands. To use the manager's name-addressed ops (deliver, read
-tail) for an agent you only know by pane id, resolve the agent name once per
-session via the name-list op and match the entry whose pane id equals the
-pane id:
+manager commands. For `hc`, $1 is the pane name and the deliver/read ops
+address it directly. For `herdr`, $1 is the pane id while deliver/read are
+agent-name addressed: resolve the name once per session via the name-list
+op and match the entry whose `pane_id` equals $1.
 
 | Neutral op | hc binding | herdr binding |
 |---|---|---|
-| name-list (all agents → pane ids) | `hc ls --json` → labeled terminals with their ids | `herdr agent list` → entries with `pane_id` |
-| deliver message | `hc send <pane-address> "<text>"` (non-blocking paste + enter) | `herdr agent prompt <name> -- "<text>"` (delivery only — never pass `--wait`, never use it as a wait) |
-| read pane tail | `hc read <pane-address>` | `herdr agent read <name> --source recent --lines N` |
+| name-list (all agents → mailbox identities) | `hc ls --json` → named terminals with their ids | `herdr agent list` → entries with `pane_id` |
+| deliver message | `hc send <pane-name> "<text>"` (non-blocking paste + enter; accepts a terminal address or a name) | `herdr agent prompt <name> -- "<text>"` (delivery only — never pass `--wait`, never use it as a wait) |
+| read pane tail | `hc read <pane-name>` | `herdr agent read <name> --source recent --lines N` |
 
 Wait is not a manager operation: the only wait anywhere in this prompt is
 `agent_wait` on a concrete `requestId`.
@@ -65,7 +66,8 @@ memory:
    source of truth — do NOT spend an agent round asking the agent for its
    binding.
 2. Only if the plan cannot be located or its header names no issue, ask the
-   agent once via a correlated request (`agent_request` to the worker pane id,
+   agent once via a correlated request (`agent_request` to the worker mailbox
+   identity,
    then deliver the question to the pane via a single non-blocking **deliver**
    op carrying the question, the returned `requestId`, and the obligation to
    answer via `agent_reply(requestId, ...)`, then
@@ -84,7 +86,7 @@ forward one unit at a time, and to apply the completion gate strictly.
 ## The drive loop (per agent, repeat)
 
 1. **Dispatch the next unit as a correlated request**: `agent_request` with
-   worker set to the pane id `$1` and message:
+   worker set to the mailbox identity `$1` and message:
    "Execute unit U<n> of the plan for issue #NN in <plan path>, then report
    per the completion report format." (The unit names come from the plan's
    unit list, in order, skipping completed ones. Keep the message minimal.)
@@ -175,32 +177,6 @@ consume.
    re-waited, not re-dispatched — re-dispatching would run the unit twice.
 4. Only units with no live request and no recorded outcome are dispatched
    fresh (via the dispatch + delivery steps of the drive loop).
-
-## Mechanical drive via `herdr-drive` (preferred for simple plans)
-
-For plans whose units need no operator judgment between gates, run the
-mechanical loop script instead of relaying unit by unit yourself:
-
-    herdr-drive --agent <agent name> --issue <NN> --plan <plan-path> U1 U2 ... U<n>
-
-(pass the remaining unit ids in order). The script submits each unit, reads
-only the report tail, gates on the status line, and prints a one-line ledger
-per unit. Then:
-
-- Exit 0 → all listed units are done and clean; report the ledger to the
-  operator. You never read the individual reports.
-- Nonzero exit → the script prints `ESCALATE <status>` plus the captured
-  report tail. Apply the gate rules above (step 3) to that escalation: relay
-  questions verbatim, stop, wait for the operator.
-
-Use the manual loop (steps 1–4) when a unit needs you to make a judgment
-call between gates; use the script when the plan is a straight sequence of
-units. Note: `herdr-drive` still submits via the manager's blocking prompt
-call (`--wait`), violating the non-blocking-delivery constraint of issue
-#70 — it has no sleep loops, but until the wrapper is migrated it produces
-no per-unit requestIds and blocks the manager during submission; prefer the
-manual loop until the wrapper is migrated to non-blocking delivery +
-correlated waits.
 
 ## Manual mode (operator drives)
 

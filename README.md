@@ -157,8 +157,11 @@ pi update --extensions   # update installed packages later
 ```
 
 The package `bin` entries — `mailbox` (the mailbox CLI) plus
-`herdr-plan-agent` and `herdr-drive`, the herdr driver wrappers used by the
-`plan-kick`/`plan-drive` prompts — are **not** put on PATH by the pi install.
+`herdr-plan-agent`, the herdr driver wrapper used by `/plan-kick` — are
+**not** put on PATH by the pi install. `herdr-drive` is also still shipped
+as a legacy wrapper, but the prompts do not use it: it submits with the
+manager's blocking prompt call (`--wait`), which the correlated-wait drive
+loop replaced.
 To make them invocable from a shell, install the package globally
 (`npm i -g github:vhallac/lopsided-skills`) or symlink/copy the scripts from
 the installed package's `bin/` directory into a directory on your `PATH`.
@@ -172,8 +175,8 @@ agent unit by unit over correlated mailbox requests, and by default drives
 the whole plan to completion in one session (stopping only on a non-clean
 gate status, a reported open issue, or an exhausted plan). Both prompts are
 manager-agnostic: they resolve the pane manager once per session from the
-environment (`HC_TERMINAL_ID` → hc, `HERDR_WORKSPACE_ID` → herdr via the
-wrappers above, neither set → stop with a `NEEDS_INPUT` request). After
+environment (`HC_TERMINAL_ID` → hc, `HERDR_WORKSPACE_ID` → herdr, neither
+set → stop with a `NEEDS_INPUT` request). After
 installing, the driver prompts are available as slash commands in your pi
 session.
 
