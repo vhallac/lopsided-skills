@@ -29,6 +29,6 @@
     "herdr-drive": "./bin/herdr-drive"
   },
   "scripts": {
-    "test": "node --test \"mailbox/test/*.test.mjs\""
+    "test": "node --test \"mailbox/test/*.test.mjs\" \"pi-ext/test/*.test.mjs\""
   }
 }
