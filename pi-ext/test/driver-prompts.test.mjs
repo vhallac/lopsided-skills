@@ -34,15 +34,13 @@ const MANAGER_COMMAND =
 const BLOCKING_OR_SLEEP = /--wait\b|\bhc\s+wait\b|\bsleep\s+(?:\d+|N)\b/;
 
 /**
- * Claim block (issue #70 / PR #66 review R3.F2):
- *   claim id: driver-prompts-C1/manager-neutral-steps
- *   claim: no prompt step names a manager-specific command; concrete
- *     commands occur only inside the manager-resolution block (#70
- *     constraint "no prompt step names a manager-specific command")
- *   scenario: Given prompts/plan-kick.md and prompts/plan-drive.md
- *     When every line outside the manager-resolution block is inspected
- *     Then no hc or herdr command occurs there
- *     And each manager-specific command occurs only in the resolution table
+ * claim: driver-prompts-BR-1/BVR-1/test_manager_commands_only_in_resolution_block
+ * claim text: no prompt step names a manager-specific command; a concrete
+ *   command occurs only in the manager-resolution block
+ * scenario: Scenario: manager-agnostic prompts — Given prompts/plan-kick.md
+ *   and prompts/plan-drive.md When every line outside the manager-resolution
+ *   block is inspected Then no hc or herdr command occurs there And each
+ *   manager-specific command occurs only in the resolution table
  */
 test("C1: manager-specific commands occur only in the manager-resolution block", () => {
   for (const name of PROMPT_FILES) {
@@ -66,15 +64,16 @@ test("C1: manager-specific commands occur only in the manager-resolution block",
 });
 
 /**
- * Claim block (issue #70 / PR #66 review R3.F1, R3.F2):
- *   claim id: driver-prompts-C2/hc-identity-at-spawn
- *   claim: the hc start/reuse op binds the mailbox identity at spawn
- *     (--name <pane-name>, AGENT_PANE=<pane-name> and MAILBOX_DIR=<mailbox-store>),
- *     so the address map resolves the same pane name as the mailbox identity
- *   scenario: Given the hc rows of the manager-resolution table
- *     Then the start/reuse cell spawns with --name <pane-name> and
- *       env AGENT_PANE=<pane-name> MAILBOX_DIR=<mailbox-store> pi
- *     And the address-map cell resolves <pane-name> as the mailbox identity
+ * claim: driver-prompts-SC-1/1/test_hc_worker_identity_at_spawn
+ * claim text: the hc start/reuse operation binds the mailbox identity at
+ *   spawn (--name <pane-name>, AGENT_PANE=<pane-name> and
+ *   MAILBOX_DIR=<mailbox-store>), so agent_request to the pane name reaches
+ *   a bound session
+ * scenario: Scenario: hc worker binds mailbox identity at a literal spawn —
+ *   Given the hc rows of the manager-resolution table Then the start/reuse
+ *   cell spawns with --name <pane-name> and env AGENT_PANE=<pane-name>
+ *   MAILBOX_DIR=<mailbox-store> pi And the address-map cell resolves
+ *   <pane-name> as the mailbox identity
  */
 test("C2: the hc worker gets its mailbox identity at spawn", () => {
   const block = resolutionBlock("plan-kick.md");
@@ -94,13 +93,13 @@ test("C2: the hc worker gets its mailbox identity at spawn", () => {
 });
 
 /**
- * Claim block (issue #70 / PR #66 review R3.F2):
- *   claim id: driver-prompts-C3/no-blocking-wait
- *   claim: neither prompt uses a manager blocking wait or a sleep-based
- *     completion loop; the only wait is agent_wait on a requestId
- *   scenario: Given prompts/plan-kick.md and prompts/plan-drive.md
- *     Then no line invokes hc wait, sleep N, or --wait as a wait
- *     And every mention of those forms is a prohibition
+ * claim: driver-prompts-BR-2/BVR-2/test_no_blocking_wait_or_sleep_loop
+ * claim text: neither prompt uses a manager blocking wait or a sleep-based
+ *   completion loop; the only wait is agent_wait on a concrete requestId
+ * scenario: Scenario: request-correlated waits only — Given
+ *   prompts/plan-kick.md and prompts/plan-drive.md Then no line invokes
+ *   hc wait, sleep N, or --wait as a wait And every mention of those forms
+ *   is a prohibition
  */
 test("C3: neither prompt carries a manager blocking wait or sleep loop", () => {
   for (const name of PROMPT_FILES) {
@@ -120,17 +119,15 @@ test("C3: neither prompt carries a manager blocking wait or sleep loop", () => {
 });
 
 /**
- * Claim block (issue #71 / PR #66 review R3.F2):
- *   claim id: driver-prompts-C4/drive-to-completion
- *   claim: plan-drive states drive-to-completion as the default with its
- *     stop conditions and scopes the worker's one-unit rule to the worker's
- *     turn (#71 use case and acceptance condition)
- *   scenario: Given prompts/plan-drive.md
- *     Then it states the default is drive to completion with its stop
- *       conditions
- *     And a clean DONE immediately dispatches the next unit in the same
- *       session
- *     And the worker's one-unit stop rule bounds only the worker's turn
+ * claim: driver-prompts-SC-2/4/test_drive_to_completion_by_default
+ * claim text: plan-drive makes drive-to-completion the default with its stop
+ *   conditions in the same session, and scopes the worker's one-unit rule to
+ *   the worker's turn
+ * scenario: Scenario: drive a plan to completion without an operator
+ *   directive — Given prompts/plan-drive.md Then it states the default is
+ *   drive to completion with its stop conditions And a clean DONE
+ *   immediately dispatches the next unit in the same session And the
+ *   worker's one-unit stop rule bounds only the worker's turn
  */
 test("C4: plan-drive drives to completion by default", () => {
   const drive = readPrompt("plan-drive.md");
