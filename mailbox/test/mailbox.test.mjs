@@ -126,6 +126,10 @@ function makeDir() {
 }
 
 // --- R2.F1: concurrency (real concurrent processes) ---
+// Standing coverage requirement (issue #50, decision 013): any future
+// store-level or locking change extends this real-concurrent-process
+// section (lock wait-timeout / stale-steal paths included) instead of
+// regressing to sequential-only tests.
 
 async function concurrencyProbes(dir) {
   const results = {};
