@@ -67,7 +67,7 @@ function requestExecute(options) {
         const own = await resolvePane({ mailboxDir, paneName });
         if (!own || !own.sessionId) {
           throw new RequestError(
-            `requester identity required: pane "${paneName}" has no bound session identity; the agent must run in a pane that has started (AGENT_PANE set) before it can request`,
+            `requester identity required: pane "${paneName}" has no bound session identity; the agent must run in a pane that has started (AGENT_PANE/HERDR_PANE_ID set) before it can request`,
           );
         }
         requesterIdentity = own.sessionId;
@@ -218,7 +218,7 @@ function rebindExecute(options) {
     const mailboxDir = options.mailboxDir ?? process.env.MAILBOX_DIR;
     try {
       const paneName = params.pane ?? options.paneName ?? resolvePaneName(options);
-      if (!paneName) throw new Error("pane name required (param `pane` or AGENT_PANE)");
+      if (!paneName) throw new Error("pane name required (param `pane`, AGENT_PANE, or HERDR_PANE_ID)");
       const result = await rebindPaneRequests({ mailboxDir, paneName, toIdentity: params.toIdentity });
       if (!result) {
         return {
