@@ -1,6 +1,6 @@
 ---
 description: Drive one or more plan agents through plan execution — request, wait, gate
-argument-hint: "<agent-pane-id> [-- directives]"
+argument-hint: "<agent-mailbox-identity> [-- directives]"
 ---
 
 Drive the plan agent(s): $1 is the agent's **mailbox identity** (or mailbox
