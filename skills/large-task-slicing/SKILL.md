@@ -438,6 +438,11 @@ Next unit:
 
 Blocked / uncertain:
 - ... or "none"
+
+Status: DONE|NEEDS_INPUT|BLOCKED|FAILED
+
+Open Issues:
+- ... or "none"
 ```
 
 ### Completion Criteria
