@@ -93,5 +93,7 @@ do not degrade to sleep-based or pane-state polling.
    - `FAILED` or a stopped-without-result outcome → treat as blocked: report
      the failure and stop.
 
-This prompt ends at plan construction. Execution is driven by /plan-drive —
+This prompt ends at plan construction for the larger path; a small issue
+may be solved directly and reported. Execution of a produced plan is driven
+by /plan-drive —
 pass it the resolved pane id (not the agent name) as its argument.
