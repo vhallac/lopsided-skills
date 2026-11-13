@@ -8,6 +8,7 @@
 // (EXT-4b). Probes run only at turn boundaries (session_start, turn_end) and
 // on an idle poll timer — never mid-run — so a reply that arrives during tool
 // rounds is queued until the next boundary (EXT-4a).
+import { storeDir } from "../../mailbox/lib/store.mjs";
 import { runMailbox as defaultRunMailbox } from "./request.mjs";
 
 const CONSUMED_PREFIX = "delivered reply for ";
@@ -105,7 +106,7 @@ export async function probeDeliveries({
  * and one seen-set, so a reply can never produce two continuations.
  */
 export function createDeliveryHooks(pi, options = {}) {
-  const mailboxDir = options.mailboxDir ?? process.env.MAILBOX_DIR;
+  const mailboxDir = options.mailboxDir ?? storeDir();
   const seen = new Set();
   let inFlight = false;
   let timer = null;

@@ -1,0 +1,79 @@
+#!/bin/sh
+# herdr-plan-agent — spawn a pi agent in a herdr tab and submit a kickoff prompt.
+#
+# semblr is installed as a pi package (settings.json "packages"), so plain `pi`
+# auto-loads it. Do NOT pass `-e` for it here: that loads a second copy and
+# doubles the BM25/csv index in the heap.
+#
+# Usage:
+#   herdr-plan-agent <name> --cwd <dir> [--tab <tab-id>] [--pane <pane-id>]
+#                    [--workspace <workspace-id>]
+#                    [--prompt-file <file> | --prompt <text>]
+#   echo "..." | herdr-plan-agent <name> --cwd <dir>
+#
+# Reuses an existing agent if <name> already exists (submits the prompt only).
+set -eu
+
+NAME=""
+CWD="$PWD"
+TAB=""
+PANE=""
+WORKSPACE="${HERDR_WORKSPACE_ID:-}"
+PROMPT_FILE=""
+PROMPT=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --cwd) CWD="$2"; shift 2 ;;
+    --tab) TAB="$2"; shift 2 ;;
+    --pane) PANE="$2"; shift 2 ;;
+    --workspace) WORKSPACE="$2"; shift 2 ;;
+    --prompt-file) PROMPT_FILE="$2"; shift 2 ;;
+    --prompt) PROMPT="$2"; shift 2 ;;
+    -*) echo "unknown option: $1" >&2; exit 2 ;;
+    *) if [ -z "$NAME" ]; then NAME="$1"; else echo "unexpected arg: $1" >&2; exit 2; fi; shift ;;
+  esac
+done
+
+[ -n "$NAME" ] || { echo "usage: herdr-plan-agent <name> --cwd <dir> [--prompt-file f|--prompt t]" >&2; exit 2; }
+
+# Read prompt from stdin if not given.
+if [ -z "$PROMPT" ] && [ -z "$PROMPT_FILE" ] && [ ! -t 0 ]; then
+  PROMPT="$(cat)"
+fi
+if [ -n "$PROMPT_FILE" ]; then
+  [ -f "$PROMPT_FILE" ] || { echo "no such prompt file: $PROMPT_FILE" >&2; exit 2; }
+  PROMPT="$(cat "$PROMPT_FILE")"
+fi
+
+# Reuse existing agent.
+if herdr agent get "$NAME" >/dev/null 2>&1; then
+  echo "agent '$NAME' already exists; reusing"
+else
+  if [ -z "$PANE" ]; then
+    if [ -z "$TAB" ]; then
+      # POSIX sh has no arrays; build the optional workspace arg as a single
+      # word-split string and pass it only when non-empty.
+      ws_arg=""
+      if [ -n "$WORKSPACE" ]; then
+        ws_arg="--workspace $WORKSPACE"
+      fi
+      TAB="$({ herdr tab create --cwd "$CWD" --label "$NAME" $ws_arg; } | sed -n 's/.*"tab_id":"\([^"]*\)".*/\1/p')"
+      [ -n "$TAB" ] || { echo "failed to create tab" >&2; exit 1; }
+      echo "created tab $TAB"
+    fi
+    PANE="$({ herdr pane list; } | jq -r --arg tab "$TAB" \
+      '.result.panes[] | select(.tab_id == $tab) | .pane_id' | head -1)"
+    [ -n "$PANE" ] || { echo "no pane found in tab $TAB" >&2; exit 1; }
+  fi
+  echo "starting agent '$NAME' in pane $PANE..."
+  herdr agent start "$NAME" --kind pi --pane "$PANE"
+  echo "agent '$NAME' ready"
+fi
+
+if [ -n "$PROMPT" ]; then
+  herdr agent prompt "$NAME" "$PROMPT" --wait
+  echo "kickoff prompt submitted to '$NAME'"
+else
+  echo "no prompt given; agent spawned idle"
+fi

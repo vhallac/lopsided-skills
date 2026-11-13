@@ -58,6 +58,28 @@ test("resolvePaneName reads AGENT_PANE from env", () => {
   assert.equal(resolvePaneName({ env: {} }), null);
 });
 
+// #67: herdr panes do not set AGENT_PANE; the documented inherited
+// environment sets HERDR_PANE_ID. AGENT_PANE keeps precedence when a pane
+// manager does provide it.
+/**
+ * Claim block (issue#43 / PR #66 review R1.F4):
+ *   claim id: driver-prompts-C1/pane-identity-fallback
+ *   claim: pane identity binds from HERDR_PANE_ID when AGENT_PANE is absent,
+ *     so correlated requests (C1) can address a worker in a real herdr pane
+ *   scenario: Given a worker agent in a real herdr pane (HERDR_PANE_ID set,
+ *     AGENT_PANE absent)
+ *     Then resolvePaneName returns the pane id
+ *     And agent_request can register against that pane's bound identity
+ */
+test("resolvePaneName falls back to HERDR_PANE_ID when AGENT_PANE is absent", () => {
+  assert.equal(resolvePaneName({ env: { HERDR_PANE_ID: "pane-abc" } }), "pane-abc");
+  assert.equal(
+    resolvePaneName({ env: { AGENT_PANE: "override", HERDR_PANE_ID: "pane-abc" } }),
+    "override"
+  );
+  assert.equal(resolvePaneName({ env: { HERDR_PANE_ID: "" } }), null);
+});
+
 // ---- unit-007: session identity, pane-name reuse, and explicit rebind ----
 
 import { recordReplacement, rebindRequester, rebindPaneRequests, latestReplacement } from "../agent-mailbox/rebind.mjs";

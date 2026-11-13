@@ -104,9 +104,10 @@ installs it like the skills. The mailbox CLI (same repo, `bin: mailbox`) is
 its backing store — the extension shells out to it; see the section above for
 store location and semantics.
 
-Pane identity: the extension binds the pane name (from the `AGENT_PANE`
-environment variable, as set by pane managers such as herdr) to a stable
-session identity at session start. A pane that restarts gets a new session
+Pane identity: the extension binds the pane name — read from the
+`AGENT_PANE` environment variable, falling back to `HERDR_PANE_ID` (as set
+by pane managers such as herdr, which does not set `AGENT_PANE`) — to a
+stable session identity at session start. A pane that restarts gets a new session
 identity and never receives its predecessor's replies until an explicit
 `agent_rebind` binds the pending requests to the replacement session.
 
@@ -155,6 +156,30 @@ pi install git:github.com/vhallac/lopsided-skills
 pi update --extensions   # update installed packages later
 ```
 
+The package `bin` entries — `mailbox` (the mailbox CLI) plus
+`herdr-plan-agent`, the herdr driver wrapper used by `/plan-kick` — are
+**not** put on PATH by the pi install. `herdr-drive` is also still shipped
+as a legacy wrapper, but the prompts do not use it: it submits with the
+manager's blocking prompt call (`--wait`), which the correlated-wait drive
+loop replaced.
+To make them invocable from a shell, install the package globally
+(`npm i -g github:vhallac/lopsided-skills`) or symlink/copy the scripts from
+the installed package's `bin/` directory into a directory on your `PATH`.
+Assume they are on PATH in the following prompts; each driver prompt states
+this precondition where its wrapper is invoked.
+
+The package also publishes two prompts (under `prompts/`, via the `pi`
+manifest's `pi.prompts`): `/plan-kick` kicks off a plan agent and has it
+construct a review-gated plan for an issue, and `/plan-drive` drives that
+agent unit by unit over correlated mailbox requests, and by default drives
+the whole plan to completion in one session (stopping only on a non-clean
+gate status, a reported open issue, or an exhausted plan). Both prompts are
+manager-agnostic: they resolve the pane manager once per session from the
+environment (`HC_TERMINAL_ID` → hc, `HERDR_WORKSPACE_ID` → herdr, neither
+set → stop with a `NEEDS_INPUT` request). After
+installing, the driver prompts are available as slash commands in your pi
+session.
+
 The repo carries a `package.json` with the `pi-package` keyword and a `pi`
 manifest pointing at `./skills` and the `agent-mailbox` extension, so the pi
 gallery can also index it.
@@ -173,7 +198,9 @@ One symlink feeds both agents; the repo stays the single source of truth.
 ## Status
 
 Early days: these skills are working drafts in daily use. More will follow in
-a proper project structure. Expect churn.
+a proper project structure. Expect churn. The published prompts `/plan-kick`
+and `/plan-drive` drive plan agents over the agent-mailbox extension, across
+any supported pane manager; they are new and expect churn too.
 
 ## License
 

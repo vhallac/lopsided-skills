@@ -18,12 +18,17 @@
     ],
     "extensions": [
       "./pi-ext/agent-mailbox/index.mjs"
+    ],
+    "prompts": [
+      "./prompts"
     ]
   },
   "bin": {
-    "mailbox": "./mailbox/mailbox.mjs"
+    "mailbox": "./mailbox/mailbox.mjs",
+    "herdr-plan-agent": "./bin/herdr-plan-agent",
+    "herdr-drive": "./bin/herdr-drive"
   },
   "scripts": {
-    "test": "node --test \"mailbox/test/*.test.mjs\""
+    "test": "node --test \"mailbox/test/*.test.mjs\" \"pi-ext/test/*.test.mjs\""
   }
 }
