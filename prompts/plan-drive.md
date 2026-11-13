@@ -1,13 +1,11 @@
 ---
-description: Drive one or more herdr plan agents through plan execution — request, wait, gate
+description: Drive one or more plan agents through plan execution — request, wait, gate
 argument-hint: "<agent-pane-id> [-- directives]"
 ---
 
-Drive the herdr agent(s): $1 is the agent's **pane id** (or pane ids before
+Drive the plan agent(s): $1 is the agent's **pane id** (or pane ids before
 `--`) — the identity the mailbox tools address, resolved from the agent name
-by /plan-kick. For `herdr` CLI commands, which take the agent name, resolve
-the name once per session: `herdr agent list` and look up the entry whose
-`pane_id` matches the pane id.
+by /plan-kick.
 
 Anything after `--` in the arguments is an operator directive. Carry it as a
 standing constraint for this drive session: quote it exactly when relaying to
@@ -16,14 +14,46 @@ the directive conflicts with a plan unit, surface the conflict to the operator
 instead of silently deviating.
 
 You are the intermediary between the operator and one or more pi agents
-running in herdr panes (each with the semblr extension). Each agent is
-executing a plan from `.todo/` unit by unit.
+running in terminal-manager panes (each with the semblr extension). Each
+agent is executing a plan from `.todo/` unit by unit.
+
+**Default: drive to completion.** Unless the operator says otherwise, you
+drive the agent through every remaining unit of the plan in this session.
+You stop driving an agent only when (a) a gate status requires it
+(`NEEDS_INPUT`, `BLOCKED`, `FAILED`, or a reported open issue), or (b) the
+plan's unit list is exhausted (all units complete). Completing one unit is
+never a reason to hand back to the operator.
 
 Requires the agent-mailbox pi extension in this session (`agent_request`,
 `agent_wait`, `agent_list`, `agent_rebind`, `agent_cancel` tools available).
 If they are not, report NEEDS_INPUT saying so — do not degrade to sleep-based
 or pane-state polling. There are NO sleep-based completion loops in this
 prompt: every wait is correlated to a specific requestId.
+
+## Manager resolution (once per session, before any manager command)
+
+Resolve the terminal manager from the environment — do NOT probe for
+availability and do NOT re-resolve later in the prompt:
+
+- `HC_TERMINAL_ID` is set → the manager is `hc`.
+- else `HERDR_WORKSPACE_ID` is set → the manager is `herdr`.
+- neither is set → report NEEDS_INPUT naming the missing variable and stop.
+
+Bind the neutral operations to the resolved manager's commands. Outside this
+block the prompt refers only to the neutral op names — never to concrete
+manager commands. To use the manager's name-addressed ops (deliver, read
+tail) for an agent you only know by pane id, resolve the agent name once per
+session via the name-list op and match the entry whose pane id equals the
+pane id:
+
+| Neutral op | hc binding | herdr binding |
+|---|---|---|
+| name-list (all agents → pane ids) | `hc ls --json` → labeled terminals with their ids | `herdr agent list` → entries with `pane_id` |
+| deliver message | `hc send <pane-address> "<text>"` (non-blocking paste + enter) | `herdr agent prompt <name> -- "<text>"` (delivery only — never pass `--wait`, never use it as a wait) |
+| read pane tail | `hc read <pane-address>` | `herdr agent read <name> --source recent --lines N` |
+
+Wait is not a manager operation: the only wait anywhere in this prompt is
+`agent_wait` on a concrete `requestId`.
 
 ## Step 0 — bind the issue (once per agent, before driving)
 
@@ -36,9 +66,9 @@ memory:
    binding.
 2. Only if the plan cannot be located or its header names no issue, ask the
    agent once via a correlated request (`agent_request` to the worker pane id,
-   then deliver the question to the pane via a single blocking
-   `herdr agent prompt` carrying the question, the returned `requestId`, and
-   the obligation to answer via `agent_reply(requestId, ...)`, then
+   then deliver the question to the pane via a single non-blocking **deliver**
+   op carrying the question, the returned `requestId`, and the obligation to
+   answer via `agent_reply(requestId, ...)`, then
    `agent_wait` on that `requestId`). If
    even then the plan and the agent disagree, or no issue is named, that is a
    `BLOCKED` gate condition — surface it and stop; do not guess a number.
@@ -62,25 +92,25 @@ forward one unit at a time, and to apply the completion gate strictly.
      ledger.
    - `agent_request` only registers and settles the request in the mailbox
      — it does NOT put the instruction in front of the agent. Deliver it
-     yourself, in the same step, via a single blocking prompt to the pane:
+     yourself, in the same step, via a single non-blocking **deliver** op:
 
-     herdr agent prompt $1 -- "Request <requestId>: Execute unit U<n> of
-     the plan for issue #NN in <plan path>, then report per the completion
-     report format. You MUST answer this request via agent_reply(requestId,
-     ...) with your status (DONE | NEEDS_INPUT | BLOCKED | FAILED) and
-     report. Do not answer any other way."
+     Request <requestId>: Execute unit U<n> of the plan for issue #NN in
+     <plan path>, then report per the completion report format. You MUST
+     answer this request via agent_reply(requestId, ...) with your status
+     (DONE | NEEDS_INPUT | BLOCKED | FAILED) and report. Do not answer any
+     other way.
 
      The delivered message MUST carry all three parts: (a) the unit
      instruction text, (b) the `requestId`, (c) the explicit obligation to
      respond with `agent_reply(requestId, ...)`.
 
-     This `herdr agent prompt` is delivery only — a single blocking call.
-     Never use `herdr agent prompt` as a wait/polling mechanism; blocking
-     on the outcome is `agent_wait` on the `requestId` below.
+     The deliver op is delivery only. Never use it as a wait/polling
+     mechanism; blocking on the outcome is `agent_wait` on the `requestId`
+     below.
    - If `agent_request` fails (worker unreachable, dispatch error), the unit
      fails for this round: record the failure against the unit and escalate
-     to the operator. Do NOT fall back to repeated `herdr agent prompt`
-     calls with sleep-and-recheck loops.
+     to the operator. Do NOT fall back to repeated deliver ops with
+     sleep-and-recheck loops.
 2. **Wait on the request**: `agent_wait` on the `requestId` with a generous
    `timeoutMs` (a unit takes minutes; use 900000). The wait resolves with the
    worker's reply: its `status` is the completion-report status (`DONE |
@@ -97,15 +127,20 @@ forward one unit at a time, and to apply the completion gate strictly.
      - **Settled without a result** (the outcome was consumed and it
        carries no usable reply): that is a FAILED outcome — handle it in
        the step-3 FAILED gate, do not re-arm the wait.
-   - The reply's `report` is the completion report; you do not need
-     `herdr agent read` for gating. Use a single `herdr agent read
-     <agent name> --source recent --lines 60` only as a diagnostic when the
-     report
-     is empty or unparsable — never as a polling loop.
+   - The reply's `report` is the completion report; you do not need the
+     read-tail op for gating. Use a single read-tail op (60 lines) only as
+     a diagnostic when the report is empty or unparsable — never as a
+     polling loop.
 3. **Gate on the status**:
-   - `DONE` and no open issues in the report → mark that unit complete,
-     continue to the next unit. Never auto-continue past a reported open
+   - `DONE` and no open issues in the report → mark that unit complete and
+     immediately dispatch the next unit in the same session (loop back to
+     step 1) — a clean DONE is not an operator handback. Only the plan being
+     exhausted ends the loop. Never auto-continue past a reported open
      issue.
+   - Note the division of stop rules: the agent's one-unit-per-round stop
+     rule bounds only the agent's turn — it is not a signal to stop driving.
+     When the agent replies `DONE` after one unit, the driver (you) continues
+     the loop with the next unit.
    - `NEEDS_INPUT` or `BLOCKED` → surface the report's questions to the
      operator verbatim and stop driving this agent until the operator
      answers.
@@ -160,15 +195,17 @@ per unit. Then:
 
 Use the manual loop (steps 1–4) when a unit needs you to make a judgment
 call between gates; use the script when the plan is a straight sequence of
-units. Note: `herdr-drive` waits via synchronous `herdr agent prompt --wait`
-CLI calls, not correlated requests — it has no sleep loops, but until it is
-migrated to request-correlated waits it does not produce per-unit
-requestIds; prefer the manual loop when you need that correlation.
+units. Note: `herdr-drive` still submits via the manager's blocking prompt
+call (`--wait`), violating the non-blocking-delivery constraint of issue
+#70 — it has no sleep loops, but until the wrapper is migrated it produces
+no per-unit requestIds and blocks the manager during submission; prefer the
+manual loop until the wrapper is migrated to non-blocking delivery +
+correlated waits.
 
 ## Manual mode (operator drives)
 
 When the operator is driving manually and asks you only to check state:
-run `agent_list` (pending requests and reply states) and `herdr agent list`
+run `agent_list` (pending requests and reply states) and the name-list op
 (pane liveness), then report per-agent: unit in progress, last completion
 status, open issues. Do not dispatch new requests unless explicitly asked.
 
@@ -182,10 +219,16 @@ than one gate check.
 
 ## Hard rules
 
-- NEVER auto-continue past a reported open issue, NEEDS_INPUT, BLOCKED, or
-  FAILED status. Those stop the loop for that agent.
+- Default is drive to completion: keep dispatching the next unit after every
+  clean `DONE` in the same session. The loop for an agent stops only on a
+  gate status (`NEEDS_INPUT`, `BLOCKED`, `FAILED`) or a reported open issue
+  — never auto-continue past those — or when the plan's unit list is
+  exhausted.
+- The worker's one-unit-per-round stop rule bounds the worker's turn only;
+  it does not end the drive loop. A worker `DONE` on unit U<n> means you
+  dispatch U<n+1> immediately.
 - NO sleep-based completion loops: no busy-wait re-checking of pane state,
-  no `sleep N; herdr agent read` cycles. Every wait is an `agent_wait` on a
+  no `sleep N;` + read-tail cycles. Every wait is an `agent_wait` on a
   concrete `requestId`; the only repeats are re-arms of that same wait.
 - Do not modify the plan's units or skip gates; the agents own their plans.
 - When relaying the operator's answers back to an agent, dispatch them as a

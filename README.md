@@ -166,10 +166,16 @@ Assume they are on PATH in the following prompts; each driver prompt states
 this precondition where its wrapper is invoked.
 
 The package also publishes two prompts (under `prompts/`, via the `pi`
-manifest's `pi.prompts`): `/plan-kick` kicks off a herdr plan agent and has
-it construct a review-gated plan for an issue, and `/plan-drive` drives that
-agent unit by unit over correlated mailbox requests. After installing, the
-driver prompts are available as slash commands in your pi session.
+manifest's `pi.prompts`): `/plan-kick` kicks off a plan agent and has it
+construct a review-gated plan for an issue, and `/plan-drive` drives that
+agent unit by unit over correlated mailbox requests, and by default drives
+the whole plan to completion in one session (stopping only on a non-clean
+gate status, a reported open issue, or an exhausted plan). Both prompts are
+manager-agnostic: they resolve the pane manager once per session from the
+environment (`HC_TERMINAL_ID` → hc, `HERDR_WORKSPACE_ID` → herdr via the
+wrappers above, neither set → stop with a `NEEDS_INPUT` request). After
+installing, the driver prompts are available as slash commands in your pi
+session.
 
 The repo carries a `package.json` with the `pi-package` keyword and a `pi`
 manifest pointing at `./skills` and the `agent-mailbox` extension, so the pi
@@ -190,8 +196,8 @@ One symlink feeds both agents; the repo stays the single source of truth.
 
 Early days: these skills are working drafts in daily use. More will follow in
 a proper project structure. Expect churn. The published prompts `/plan-kick`
-and `/plan-drive` drive herdr plan agents over the agent-mailbox extension;
-they are new and expect churn too.
+and `/plan-drive` drive plan agents over the agent-mailbox extension, across
+any supported pane manager; they are new and expect churn too.
 
 ## License
 
