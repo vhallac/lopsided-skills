@@ -1,7 +1,7 @@
 // Tool registration unit tests (scaffold contract, unit-001).
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -55,10 +55,12 @@ test("no scaffold stubs remain once all three tools are implemented (unit-004)",
 });
 
 test("agent_request execute surfaces an error result when the mailbox dir is missing", async () => {
-  const tool = createTools().find((t) => t.name === "agent_request");
+  // mailboxDir: "" pins the missing-dir condition instead of falling through
+  // to storeDir() (R5.F1); env: {} keeps the runner's pane env out of it.
+  const tool = createTools({ mailboxDir: "", env: {} }).find((t) => t.name === "agent_request");
   const result = await tool.execute("tc-2", { worker: "w", instruction: "i" });
   assert.equal(result.details.error, true);
-  assert.match(result.content[0].text, /^agent_request failed:/);
+  assert.match(result.content[0].text, /^agent_request failed: mailboxDir required/);
 });
 
 // R1.F2: anonymous requester fail-fast — agent_request and agent_wait both
@@ -105,10 +107,10 @@ test("agent_wait execute fails fast for a pane with no bound identity", async ()
 });
 
 test("agent_wait execute surfaces an error result when the mailbox dir is missing", async () => {
-  const tool = createTools().find((t) => t.name === "agent_wait");
+  const tool = createTools({ mailboxDir: "", env: {} }).find((t) => t.name === "agent_wait");
   const result = await tool.execute("tc-3", { requestId: "req-1" });
   assert.equal(result.details.error, true);
-  assert.match(result.content[0].text, /^agent_wait failed:/);
+  assert.match(result.content[0].text, /^agent_wait failed: mailboxDir required/);
 });
 
 test("session_start binds the pane identity under the mailbox dir namespace", async () => {
@@ -119,6 +121,29 @@ test("session_start binds the pane identity under the mailbox dir namespace", as
   const { resolvePane } = await import("../agent-mailbox/identity.mjs");
   const binding = await resolvePane({ mailboxDir, paneName: "worker-a" });
   assert.equal(binding.sessionId, "sess-1");
+});
+
+test("session_start binds under the default store path when MAILBOX_DIR is unset (R5.F1)", async () => {
+  const tempHome = await mkdtemp(join(tmpdir(), "agent-mailbox-home-"));
+  const prevHome = process.env.HOME;
+  const prevMailboxDir = process.env.MAILBOX_DIR;
+  delete process.env.MAILBOX_DIR;
+  process.env.HOME = tempHome;
+  try {
+    const pi = fakePi();
+    // No mailboxDir option: the extension must fall back to storeDir(),
+    // which resolves under the (temporary) HOME.
+    agentMailboxExtension(pi, { paneName: "worker-a", sessionId: "sess-default" });
+    await pi.handlers.session_start({}, {});
+    const expectedPath = join(tempHome, ".local", "share", "mailbox", "ext", "session-identities.json");
+    const raw = JSON.parse(await readFile(expectedPath, "utf8"));
+    assert.equal(raw["worker-a"].sessionId, "sess-default");
+  } finally {
+    if (prevHome === undefined) delete process.env.HOME;
+    else process.env.HOME = prevHome;
+    if (prevMailboxDir === undefined) delete process.env.MAILBOX_DIR;
+    else process.env.MAILBOX_DIR = prevMailboxDir;
+  }
 });
 
 test("session_start without an obtainable session id refuses to bind (R1.F5)", async () => {
