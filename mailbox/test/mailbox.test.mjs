@@ -1,8 +1,9 @@
-// Behavioral tests for mailbox unit-001 (scenarios 1–2, pending
-// discoverability), unit-002 (scenarios 3–5, duplicate/worker-identity), and
-// unit-003 (scenarios 6–10: exactly-once consumption, unreachable
-// redelivery, pause hold, requester-identity rebind guard), mapped to
-// .todo/specs/mailbox-service.feature.
+// Behavioral tests for mailbox unit-001 (pending discoverability),
+// unit-002 (duplicate/worker-identity), and unit-003 (exactly-once
+// consumption, unreachable redelivery, pause hold, requester-identity
+// rebind guard). Claim-to-test tracing is by scenario title in the test
+// name (decision 010); numeric prefixes were dropped (issue #49) because
+// they drifted as scenarios were added or removed.
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -223,7 +224,7 @@ test("R2.F1 regression: concurrent reply and cancel — no acknowledged effect l
   }
 });
 
-test("scenario 1: register creates a reply expectation before exposure", () => {
+test("register creates a reply expectation before exposure", () => {
   const dir = makeDir();
   const out = run(dir, "register", "--id", "r1", "--requester", "q1", "--worker", "w1", "--instruction", "do the thing");
   assert.match(out, /registered r1 \(pending\)/);
@@ -240,7 +241,7 @@ test("scenario 1: register creates a reply expectation before exposure", () => {
   assert.equal(record.instruction, "do the thing");
 });
 
-test("scenario 2: re-registration with a live expectation is rejected, original unchanged", () => {
+test("re-registration with a live expectation is rejected, original unchanged", () => {
   const dir = makeDir();
   run(dir, "register", "--id", "r1", "--requester", "q1", "--worker", "w1", "--instruction", "first instruction");
 
@@ -253,7 +254,7 @@ test("scenario 2: re-registration with a live expectation is rejected, original 
   assert.equal(record.requester, "q1");
 });
 
-test("scenario 3: reply is persisted against the original request", () => {
+test("reply is persisted against the original request", () => {
   const dir = makeDir();
   run(dir, "register", "--id", "r1", "--requester", "q1", "--worker", "w1", "--instruction", "i");
   run(dir, "dispatch", "--id", "r1");
@@ -269,7 +270,7 @@ test("scenario 3: reply is persisted against the original request", () => {
   assert.equal(run(dir, "list", "--pending"), "");
 });
 
-test("scenario 4: duplicate reply keeps the first — one logical delivery", () => {
+test("duplicate reply keeps the first — one logical delivery", () => {
   const dir = makeDir();
   run(dir, "register", "--id", "r1", "--requester", "q1", "--worker", "w1", "--instruction", "i");
   run(dir, "dispatch", "--id", "r1");
@@ -282,7 +283,7 @@ test("scenario 4: duplicate reply keeps the first — one logical delivery", () 
   assert.equal(record.reply.report, "first");
 });
 
-test("scenario 5: replaced worker identity cannot bind a reply; attempt stays inspectable", () => {
+test("replaced worker identity cannot bind a reply; attempt stays inspectable", () => {
   const dir = makeDir();
   run(dir, "register", "--id", "r1", "--requester", "q1", "--worker", "w1", "--instruction", "i");
   run(dir, "dispatch", "--id", "r1");
@@ -332,7 +333,7 @@ test("non-vocabulary status is rejected", () => {
 
 // --- unit-003: delivery ---
 
-test("scenario 6: exactly-once consumption — late re-delivery is a no-op", () => {
+test("exactly-once consumption — late re-delivery is a no-op", () => {
   const dir = makeDir();
   run(dir, "register", "--id", "r1", "--requester", "q1", "--worker", "w1", "--instruction", "i");
   run(dir, "dispatch", "--id", "r1");
@@ -352,7 +353,7 @@ test("scenario 6: exactly-once consumption — late re-delivery is a no-op", () 
   assert.equal(after.deliveredAt, record.deliveredAt);
 });
 
-test("scenario 8: reply survives an unreachable requester — redelivered later", () => {
+test("reply survives an unreachable requester — redelivered later", () => {
   const dir = makeDir();
   run(dir, "register", "--id", "r1", "--requester", "q1", "--worker", "w1", "--instruction", "i");
   run(dir, "dispatch", "--id", "r1");
@@ -370,7 +371,7 @@ test("scenario 8: reply survives an unreachable requester — redelivered later"
   assert.equal(record.delivered, true);
 });
 
-test("scenario 9: paused requester holds the reply as inspectable state", () => {
+test("paused requester holds the reply as inspectable state", () => {
   const dir = makeDir();
   run(dir, "register", "--id", "r1", "--requester", "q1", "--worker", "w1", "--instruction", "i");
   run(dir, "dispatch", "--id", "r1");
@@ -392,7 +393,7 @@ test("scenario 9: paused requester holds the reply as inspectable state", () => 
   assert.match(run(dir, "consume", "--id", "r1", "--requester", "q1"), /delivered reply for r1: DONE/);
 });
 
-test("scenario 10: requester identity change refuses delivery until explicit rebind", () => {
+test("requester identity change refuses delivery until explicit rebind", () => {
   const dir = makeDir();
   run(dir, "register", "--id", "r1", "--requester", "q1", "--worker", "w1", "--instruction", "i");
   run(dir, "dispatch", "--id", "r1");
