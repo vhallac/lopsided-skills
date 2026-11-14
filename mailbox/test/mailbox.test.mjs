@@ -2,8 +2,8 @@
 // unit-002 (duplicate/worker-identity), and unit-003 (exactly-once
 // consumption, unreachable redelivery, pause hold, requester-identity
 // rebind guard). Claim-to-test tracing is by scenario title in the test
-// name (decision 010); numeric prefixes were dropped (issue #49) because
-// they drifted as scenarios were added or removed.
+// name, per issue #49; numeric prefixes were dropped because they drifted
+// as scenarios were added or removed.
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
