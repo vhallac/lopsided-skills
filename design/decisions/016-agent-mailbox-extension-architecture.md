@@ -1,6 +1,6 @@
 # 016 — The agent-mailbox pi extension shells out to the mailbox CLI and keeps its own state namespaced away from the store
 
-**Status:** accepted
+**Status:** accepted (amended 2026-11-14)
 
 ## Context
 
@@ -23,6 +23,11 @@ extension-only state (the pane → session identity bindings) lives.
   Amendment (issue #43 / #67): the source is `AGENT_PANE || HERDR_PANE_ID`
   (empty string counts as unset) so herdr panes — which set only
   `HERDR_PANE_ID` — are no longer anonymous.
+  Amendment (issue #77, 2026-11-14): the precedence extends to
+  `AGENT_PANE || HERDR_PANE_ID || HC_TERMINAL_ID` (empty string counts as
+  unset) so a root pane in the herdr-app / hc desktop client — which sets
+  only `HC_TERMINAL_ID` — can bind its own identity, matching the manager
+  resolution the driver prompts already use.
 - **Blocking waits are extension-internal.** `agent_wait` is a bounded
   subprocess poll loop on `mailbox show` (read-only) — never an LLM round —
   and consumes via `mailbox consume`, inheriting exactly-once (decision 012

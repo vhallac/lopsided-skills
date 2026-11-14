@@ -102,7 +102,7 @@ export async function dispatchRequest({
   const binding = await resolvePane({ mailboxDir, paneName: worker });
   if (!binding || !binding.sessionId) {
     // EXT-1a: unknown/unreachable worker — fail before any store mutation.
-    throw new RequestError(`unknown worker pane "${worker}": no session identity is bound for this pane; the agent must run in a pane that has started (AGENT_PANE/HERDR_PANE_ID set) before it can be addressed`);
+    throw new RequestError(`unknown worker pane "${worker}": no session identity is bound for this pane; the agent must run in a pane that has started (AGENT_PANE, HERDR_PANE_ID, or HC_TERMINAL_ID set) before it can be addressed`);
   }
   const run = (args) => runMailboxImpl({ mailboxDir, args });
   const requestId = idFactory();
