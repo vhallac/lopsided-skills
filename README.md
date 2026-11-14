@@ -106,7 +106,8 @@ store location and semantics.
 
 Pane identity: the extension binds the pane name — read from the
 `AGENT_PANE` environment variable, falling back to `HERDR_PANE_ID` (as set
-by pane managers such as herdr, which does not set `AGENT_PANE`) — to a
+by the herdr TUI, which does not set `AGENT_PANE`) and then to
+`HC_TERMINAL_ID` (as set per pane by the herdr-app / hc desktop client) — to a
 stable session identity at session start. A pane that restarts gets a new session
 identity and never receives its predecessor's replies until an explicit
 `agent_rebind` binds the pending requests to the replacement session.

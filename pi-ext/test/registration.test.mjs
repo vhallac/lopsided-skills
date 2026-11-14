@@ -79,7 +79,7 @@ test("agent_request execute fails fast for a pane with no bound identity", async
   // R2.F5: the remediation tail names both identity variables.
   assert.match(
     result.content[0].text,
-    /\(AGENT_PANE\/HERDR_PANE_ID set\) before it can request/,
+    /\(AGENT_PANE, HERDR_PANE_ID, or HC_TERMINAL_ID set\) before it can request/,
   );
 });
 
@@ -90,7 +90,7 @@ test("agent_request execute fails fast when no pane name is set", async () => {
   const tool = createTools({ mailboxDir, env: {} }).find((t) => t.name === "agent_request");
   const result = await tool.execute("tc-r1f2b", { worker: "w", instruction: "i" });
   assert.equal(result.details.error, true);
-  assert.match(result.content[0].text, /no pane name \(AGENT_PANE\/HERDR_PANE_ID\) is set/);
+  assert.match(result.content[0].text, /no pane name \(AGENT_PANE, HERDR_PANE_ID, or HC_TERMINAL_ID\) is set/);
 });
 
 test("agent_wait execute fails fast for a pane with no bound identity", async () => {
@@ -167,20 +167,84 @@ test("anonymous pane (no AGENT_PANE) skips identity binding", async () => {
   assert.equal(await resolvePane({ mailboxDir, paneName: "anything" }), null);
 });
 
-// R2.F5: remediation strings name both identity variables — every
-// no-identity error message tells the agent that AGENT_PANE or
-// HERDR_PANE_ID (not just AGENT_PANE) provides the pane name.
+// #77 acceptance: a root pane (no explicit paneName, no AGENT_PANE) must
+// self-bind from its manager's per-pane variable — HC_TERMINAL_ID for the
+// herdr-app / hc desktop client and HERDR_PANE_ID for the herdr TUI.
+/**
+ * Claim block (issue#77):
+ *   claim id: agent-mailbox-77/root-pane-self-bind
+ *   claim: a root pane self-binds from its manager's per-pane variable
+ *     (HC_TERMINAL_ID for herdr-app/hc, HERDR_PANE_ID for the herdr TUI)
+ *     even without AGENT_PANE, and can dispatch and wait as a requester
+ *   scenario: Given a root pane whose env sets only its per-pane variable
+ *     Then session_start binds the per-pane name
+ *     And two distinct per-pane values bind distinct identities
+ *     And agent_request dispatches from that binding and agent_wait returns
+ *     the worker's outcome
+ */
+test("#77: root pane binds from HC_TERMINAL_ID and dispatches/waits as requester", async () => {
+  const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-hc-"));
+  const { bindPane, resolvePane } = await import("../agent-mailbox/identity.mjs");
+  await bindPane({ mailboxDir, paneName: "worker-b", sessionId: "sess-worker-b" });
+
+  const env = { HC_TERMINAL_ID: "t1c" };
+  const pi = fakePi();
+  agentMailboxExtension(pi, { mailboxDir, env, sessionId: "sess-hc" });
+  await pi.handlers.session_start({}, {});
+  assert.equal((await resolvePane({ mailboxDir, paneName: "t1c" })).sessionId, "sess-hc");
+
+  const request = pi.registered.find((t) => t.name === "agent_request");
+  const dispatched = await request.execute("tc-hc-req", { worker: "worker-b", instruction: "i" });
+  assert.equal(dispatched.details.error, undefined);
+  const { requestId } = dispatched.details;
+
+  const { replyOutcome } = await import("../agent-mailbox/reply.mjs");
+  await replyOutcome({ mailboxDir, requestId, status: "DONE", report: "ok", workerPane: "worker-b" });
+
+  const wait = pi.registered.find((t) => t.name === "agent_wait");
+  const waited = await wait.execute("tc-hc-wait", { requestId, timeoutMs: 1000 });
+  assert.equal(waited.details.status, "outcome");
+  assert.equal(waited.details.reply.status, "DONE");
+});
+
+test("#77: root pane binds from HERDR_PANE_ID at session_start", async () => {
+  const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-herdr-"));
+  const env = { HERDR_PANE_ID: "pane-tui" };
+  const pi = fakePi();
+  agentMailboxExtension(pi, { mailboxDir, env, sessionId: "sess-tui" });
+  await pi.handlers.session_start({}, {});
+  const { resolvePane } = await import("../agent-mailbox/identity.mjs");
+  assert.equal((await resolvePane({ mailboxDir, paneName: "pane-tui" })).sessionId, "sess-tui");
+});
+
+test("#77: distinct per-pane terminal ids bind distinct identities", async () => {
+  const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-hc2-"));
+  const pi1 = fakePi();
+  agentMailboxExtension(pi1, { mailboxDir, env: { HC_TERMINAL_ID: "t1c" }, sessionId: "sess-1" });
+  await pi1.handlers.session_start({}, {});
+  const pi2 = fakePi();
+  agentMailboxExtension(pi2, { mailboxDir, env: { HC_TERMINAL_ID: "t2d" }, sessionId: "sess-2" });
+  await pi2.handlers.session_start({}, {});
+  const { resolvePane } = await import("../agent-mailbox/identity.mjs");
+  assert.equal((await resolvePane({ mailboxDir, paneName: "t1c" })).sessionId, "sess-1");
+  assert.equal((await resolvePane({ mailboxDir, paneName: "t2d" })).sessionId, "sess-2");
+});
+
+// R2.F5/#77: remediation strings name every identity variable — every
+// no-identity error message tells the agent that AGENT_PANE, HERDR_PANE_ID,
+// or HC_TERMINAL_ID (not just AGENT_PANE) provides the pane name.
 /**
  * Claim block (unit-004):
  *   claim id: mailbox-ext-R2F5/1
- *   claim: all no-identity error messages name AGENT_PANE/HERDR_PANE_ID,
- *     and agent_rebind's message names `pane`, AGENT_PANE, or HERDR_PANE_ID
+ *   claim: all no-identity error messages name AGENT_PANE, HERDR_PANE_ID,
+ *     and HC_TERMINAL_ID, and agent_rebind's message names `pane`,
+ *     AGENT_PANE, HERDR_PANE_ID, or HC_TERMINAL_ID
  *   scenario: Given a tool invocation that hits a no-identity/unknown-pane
  *     remediation path
- *     Then the error text names both AGENT_PANE and HERDR_PANE_ID (or the
+ *     Then the error text names all three identity variables (or the
  *     rebind parameter alternatives)
  */
-test("request to an unbound worker pane names AGENT_PANE/HERDR_PANE_ID (R2.F5)", async () => {
+test("request to an unbound worker pane names all identity variables (R2.F5)", async () => {
   const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-reg-"));
   // Bind the requester so the failure lands on the worker-unknown path.
   const pi = fakePi();
@@ -193,11 +257,11 @@ test("request to an unbound worker pane names AGENT_PANE/HERDR_PANE_ID (R2.F5)",
   assert.equal(result.details.error, true);
   assert.match(
     result.content[0].text,
-    /unknown worker pane "ghost-pane".*\(AGENT_PANE\/HERDR_PANE_ID set\) before it can be addressed/,
+    /unknown worker pane "ghost-pane".*\(AGENT_PANE, HERDR_PANE_ID, or HC_TERMINAL_ID set\) before it can be addressed/,
   );
 });
 
-test("reply from an unbound worker pane names AGENT_PANE/HERDR_PANE_ID (R2.F5)", async () => {
+test("reply from an unbound worker pane names all identity variables (R2.F5)", async () => {
   const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-reg-"));
   const tool = createTools({ mailboxDir, paneName: "unbound-worker" }).find(
     (t) => t.name === "agent_reply",
@@ -206,11 +270,11 @@ test("reply from an unbound worker pane names AGENT_PANE/HERDR_PANE_ID (R2.F5)",
   assert.equal(result.details.error, true);
   assert.match(
     result.content[0].text,
-    /unknown worker pane "unbound-worker".*\(AGENT_PANE\/HERDR_PANE_ID set\) before it can reply/,
+    /unknown worker pane "unbound-worker".*\(AGENT_PANE, HERDR_PANE_ID, or HC_TERMINAL_ID set\) before it can reply/,
   );
 });
 
-test("wait from an unbound pane names AGENT_PANE/HERDR_PANE_ID (R2.F5)", async () => {
+test("wait from an unbound pane names all identity variables (R2.F5)", async () => {
   const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-reg-"));
   const tool = createTools({ mailboxDir, paneName: "unbound-waiter" }).find(
     (t) => t.name === "agent_wait",
@@ -219,17 +283,17 @@ test("wait from an unbound pane names AGENT_PANE/HERDR_PANE_ID (R2.F5)", async (
   assert.equal(result.details.error, true);
   assert.match(
     result.content[0].text,
-    /pane "unbound-waiter" has no bound session identity.*\(AGENT_PANE\/HERDR_PANE_ID set\) before it can wait/,
+    /pane "unbound-waiter" has no bound session identity.*\(AGENT_PANE, HERDR_PANE_ID, or HC_TERMINAL_ID set\) before it can wait/,
   );
 });
 
-test("agent_rebind without a pane name names pane, AGENT_PANE, or HERDR_PANE_ID (R2.F5)", async () => {
+test("agent_rebind without a pane name names pane, AGENT_PANE, HERDR_PANE_ID, or HC_TERMINAL_ID (R2.F5)", async () => {
   const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-reg-"));
   const tool = createTools({ mailboxDir, env: {} }).find((t) => t.name === "agent_rebind");
   const result = await tool.execute("tc-r2f5d", {});
   assert.equal(result.details.error, true);
   assert.match(
     result.content[0].text,
-    /pane name required \(param `pane`, AGENT_PANE, or HERDR_PANE_ID\)/,
+    /pane name required \(param `pane`, AGENT_PANE, HERDR_PANE_ID, or HC_TERMINAL_ID\)/,
   );
 });

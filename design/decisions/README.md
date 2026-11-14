@@ -1,6 +1,6 @@
 # Design decisions
 
-016 — agent-mailbox-extension-architecture — accepted
+016 — agent-mailbox-extension-architecture — accepted (amended 2026-11-14)
 015 — offline-review-target — accepted
 014 — cancel-is-terminal — accepted
 013 — mailbox-record-mutation-locking — accepted
