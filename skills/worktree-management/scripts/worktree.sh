@@ -9,7 +9,9 @@
 # <repo> is the main checkout (path or URL resolvable by git -C). Guards run
 # in fail-closed order: an open plan dies first, then an open PR, then the
 # removal proceeds without --force (git's own unclean-refusal is the second
-# layer).
+# layer). The PR check always runs: <branch> is derived from the worktree's
+# HEAD when omitted, and a gh failure is treated as "unknown PR state" and
+# refuses the release (fail closed).
 set -euo pipefail
 
 die() { echo "error: $*" >&2; exit 1; }
@@ -25,9 +27,11 @@ release)
 		die "PLAN OPEN - archive first"
 	fi
 	gh_repo=$(git -C "$wt" remote get-url origin | sed -E -e 's#.*github.com[:/]##' -e 's/\.git$//')
-	if [ -n "$branch" ] && gh pr list --repo "$gh_repo" --head "$branch" --state open | grep -q .; then
-		die "PR STILL OPEN - merge first"
-	fi
+	[ -n "$branch" ] || branch=$(git -C "$wt" branch --show-current)
+	[ -n "$branch" ] || die "cannot derive branch from worktree HEAD - pass <branch>"
+	pr_list=$(gh pr list --repo "$gh_repo" --head "$branch" --state open) \
+		|| die "gh pr list failed - cannot confirm PR state for $branch"
+	[ -z "$pr_list" ] || die "PR STILL OPEN - merge first"
 	git -C "$repo" worktree remove "$wt"
 	git -C "$repo" worktree prune
 	echo "released $stream"

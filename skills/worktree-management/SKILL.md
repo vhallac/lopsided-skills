@@ -72,7 +72,9 @@ skills/worktree-management/scripts/worktree.sh release <repo-root> <stream> [<br
 ```
 
 - `<repo-root>` is the main checkout path; `<branch>` (optional) is the
-  stream's branch to check for open PRs via `gh`.
+  stream's branch to check for open PRs via `gh` — when omitted it is derived
+  from the worktree's HEAD, so the PR guard always runs. A `gh` failure is
+  treated as unknown PR state and refuses the release (fail closed).
 
 ## Coordination contract
 
