@@ -68,6 +68,13 @@ gate() {
 
   case "$_status" in
     DONE)
+      # Exactly one Open Issues block is parseable; multiple headers mean a
+      # stale block plus a fresh one — escalate rather than read the wrong one.
+      if [ "$(printf '%s\n' "$_tail" | grep -c '^Open Issues:')" -gt 1 ]; then
+        echo "ESCALATE UNPARSEABLE (multiple Open Issues blocks, ${_unit})"
+        printf '%s\n' "$_tail"
+        return 1
+      fi
       _issues="$(printf '%s\n' "$_tail" | sed -n '/^Open Issues:/,/^$/p')"
       if printf '%s\n' "$_issues" | grep -qiE '(^|[,:[:space:]])none([,.:[:space:]]|$)'; then
         echo "unit ${_unit}: DONE"
