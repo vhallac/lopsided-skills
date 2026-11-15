@@ -1,6 +1,6 @@
 # 011 — The mailbox service CLI is a Node.js CLI shipped via package.json bin in this repository
 
-**Status:** accepted
+**Status:** accepted (amended 2026-11-13)
 
 ## Context
 
@@ -29,5 +29,9 @@ not (same host, same OS user, single-requester correlation).
   file per request, atomic tmp+rename writes); no daemon, no network.
 - Delivery is pull-based (`mailbox consume`); push notification is deferred
   to the #42 pi integration.
+- Re-attempt ownership: an undelivered reply is re-attempted only by the
+  client's next `consume`; re-attempt scheduling is the client's (#42
+  extension's) responsibility — the service never re-attempts on its own.
+  (Amendment from issue #48.)
 - If a non-Node runtime is ever required, this decision must be revisited
   (the store format is plain JSON files, so a port is mechanical).

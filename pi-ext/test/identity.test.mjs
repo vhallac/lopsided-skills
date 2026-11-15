@@ -80,6 +80,39 @@ test("resolvePaneName falls back to HERDR_PANE_ID when AGENT_PANE is absent", ()
   assert.equal(resolvePaneName({ env: { HERDR_PANE_ID: "" } }), null);
 });
 
+// #77: the herdr-app / hc desktop client sets HC_TERMINAL_ID per pane
+// instead of AGENT_PANE/HERDR_PANE_ID. It is the last rung of the
+// precedence chain, so the explicit manager variables keep winning.
+/**
+ * Claim block (issue#77):
+ *   claim id: agent-mailbox-77/HC-terminal
+ *   claim: pane identity falls back to HC_TERMINAL_ID when AGENT_PANE and
+ *     HERDR_PANE_ID are absent, so a root pane in the herdr-app desktop
+ *     client can bind its own identity
+ *   scenario: Given a root pane in the herdr-app desktop client
+ *     (HC_TERMINAL_ID set, AGENT_PANE and HERDR_PANE_ID absent)
+ *     Then resolvePaneName returns the per-pane terminal id
+ *     And two distinct terminal ids resolve to distinct pane names
+ */
+test("resolvePaneName falls back to HC_TERMINAL_ID when AGENT_PANE and HERDR_PANE_ID are absent", () => {
+  assert.equal(resolvePaneName({ env: { HC_TERMINAL_ID: "t1c" } }), "t1c");
+  assert.equal(
+    resolvePaneName({ env: { HERDR_PANE_ID: "pane-abc", HC_TERMINAL_ID: "t1c" } }),
+    "pane-abc"
+  );
+  assert.equal(
+    resolvePaneName({
+      env: { AGENT_PANE: "override", HERDR_PANE_ID: "pane-abc", HC_TERMINAL_ID: "t1c" },
+    }),
+    "override"
+  );
+  assert.equal(resolvePaneName({ env: { HC_TERMINAL_ID: "" } }), null);
+  assert.notEqual(
+    resolvePaneName({ env: { HC_TERMINAL_ID: "t1c" } }),
+    resolvePaneName({ env: { HC_TERMINAL_ID: "t2d" } })
+  );
+});
+
 // ---- unit-007: session identity, pane-name reuse, and explicit rebind ----
 
 import { recordReplacement, rebindRequester, rebindPaneRequests, latestReplacement } from "../agent-mailbox/rebind.mjs";

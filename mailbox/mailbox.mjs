@@ -125,7 +125,7 @@ async function main(argv) {
         const existing = await load(dir, requestId);
         if (existing && existing.state !== "cancelled") {
           // Re-registration with a live expectation is rejected; the original
-          // request is left unchanged (feature scenario 2).
+          // request is left unchanged.
           throw new CommandExit(STATUS_EXIT.rejected, `request "${requestId}" already has a live expectation; registration rejected, original unchanged`);
         }
         if (existing) {
@@ -203,7 +203,7 @@ async function main(argv) {
           throw new CommandExit(STATUS_EXIT.rejected, `reply for "${requestId}" rejected: the request is cancelled; no outcome can bind (attempt recorded)`);
         }
         if (record.worker !== opts.worker) {
-          // Replaced worker identity cannot bind a reply (feature scenario 5):
+          // Replaced worker identity cannot bind a reply:
           // the attempt is rejected and kept inspectable on the record; the
           // request keeps no outcome bound to the new session.
           record.rejectedReplies.push({
@@ -216,11 +216,11 @@ async function main(argv) {
           throw new CommandExit(STATUS_EXIT.rejected, `reply for "${requestId}" rejected: submitting worker "${opts.worker}" does not match the dispatched worker identity "${record.worker}"; attempt recorded`);
         }
         if (record.reply) {
-          // Duplicate reply keeps the first — one logical delivery (scenario 4).
+          // Duplicate reply keeps the first — one logical delivery.
           console.log(`reply for ${requestId} ignored: first reply (${record.reply.status}) already persisted`);
           return;
         }
-        // Reply persists against the original requestId only (scenario 3).
+        // Reply persists against the original requestId only.
         record.reply = {
           status: opts.status,
           report: opts.report ?? null,
@@ -246,8 +246,8 @@ async function main(argv) {
           return save(dir, record);
         };
         if (record.requester !== opts.requester) {
-          // Requester identity change refuses delivery until an explicit rebind
-          // (feature scenario 10); the refusal stays inspectable.
+          // Requester identity change refuses delivery until an explicit rebind;
+          // the refusal stays inspectable.
           await note("refused-identity-change");
           throw new CommandExit(STATUS_EXIT.rejected, `delivery for "${requestId}" refused: consuming identity "${opts.requester}" does not match the registered requester "${record.requester}"; explicit rebind required`);
         }
@@ -260,20 +260,21 @@ async function main(argv) {
         }
         if (record.paused) {
           // Paused requester holds the reply as inspectable state; no delivery
-          // is attempted while paused (feature scenario 9).
+          // is attempted while paused.
           await note("held-paused");
           console.log(`delivery for ${requestId} held: requester is paused (reply stays persisted)`);
           return;
         }
         if (record.delivered) {
           // Exactly-once consumption: a late re-delivery attempt after
-          // consumption is a no-op (feature scenario 6).
+          // consumption is a no-op.
           console.log(`reply for ${requestId} already delivered; re-delivery is a no-op`);
           return;
         }
-        // Delivery to the registered requester identity (feature scenarios 6
-        // and 8): an unreachable requester simply has not consumed yet — the
-        // reply stays persisted and a later consume delivers it.
+        // Delivery to the registered requester identity (feature scenario:
+        // Reply survives an unreachable requester): an unreachable requester
+        // simply has not consumed yet — the reply stays persisted and a later
+        // consume delivers it.
         // R2.F3 ordering: the reply is written to the requester's stdout
         // BEFORE the delivered mark is set. A crash between print and mark
         // means the next consume re-delivers — the reply can repeat but is

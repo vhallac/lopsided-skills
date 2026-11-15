@@ -1,6 +1,6 @@
 # 013 — Mailbox record mutation is serialized by a per-request exclusive lock
 
-**Status:** accepted
+**Status:** accepted (amended 2026-11-13)
 
 ## Context
 
@@ -49,3 +49,10 @@ serialization once.
 - Applicability beyond the mailbox: any same-host file-store backing a
   multi-client CLI should treat per-key serialization + state-recheck-under-
   lock as the default, and verify it with real concurrent processes.
+- Standing requirement (amendment from issue #50): any future store-level or
+  locking change extends the real-concurrent-process coverage rather than
+  regressing to sequential-only tests. Paths not yet covered under real
+  concurrency — notably the lock wait-timeout ("busy") and stale-lock steal
+  paths — must be brought under concurrent-process tests by the change that
+  touches them; sequential tests never exercise the interleavings these
+  guards exist for.

@@ -59,7 +59,7 @@ export async function replyOutcome({
     const binding = await resolvePaneImpl({ mailboxDir, paneName: workerPane });
     if (!binding || !binding.sessionId) {
       throw new ReplyError(
-        `unknown worker pane "${workerPane}": no session identity is bound for this pane; the agent must run in a pane that has started (AGENT_PANE/HERDR_PANE_ID set) before it can reply`,
+        `unknown worker pane "${workerPane}": no session identity is bound for this pane; the agent must run in a pane that has started (AGENT_PANE, HERDR_PANE_ID, or HC_TERMINAL_ID set) before it can reply`,
         { kind: "rejected" },
       );
     }

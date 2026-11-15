@@ -122,13 +122,13 @@ export async function resolveRequesterIdentity({ mailboxDir, paneName }) {
   if (!mailboxDir) throw new WaitError("mailboxDir required");
   if (!paneName) {
     throw new WaitError(
-      "requester identity required: no pane name (AGENT_PANE/HERDR_PANE_ID) is set for this pane; the agent must run in a pane that has started before it can wait",
+      "requester identity required: no pane name (AGENT_PANE, HERDR_PANE_ID, or HC_TERMINAL_ID) is set for this pane; the agent must run in a pane that has started before it can wait",
     );
   }
   const own = await resolvePane({ mailboxDir, paneName });
   if (!own || !own.sessionId) {
     throw new WaitError(
-      `requester identity required: pane "${paneName}" has no bound session identity; the agent must run in a pane that has started (AGENT_PANE/HERDR_PANE_ID set) before it can wait`,
+      `requester identity required: pane "${paneName}" has no bound session identity; the agent must run in a pane that has started (AGENT_PANE, HERDR_PANE_ID, or HC_TERMINAL_ID set) before it can wait`,
     );
   }
   return own.sessionId;
