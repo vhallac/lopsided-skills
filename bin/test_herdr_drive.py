@@ -23,10 +23,10 @@ esac
 def tail(status: str, issues: str) -> str:
     """A completion-report-shaped tail."""
     return (
+        f"Status: {status}\n"
+        "\n"
         "Open Issues:\n"
         f"- {issues}\n"
-        "\n"
-        f"Status: {status}\n"
     )
 
 
@@ -59,12 +59,27 @@ class TestHerdrDriveGate(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("ESCALATE DONE-with-open-issues (U1)", r.stdout)
 
-    def test_duplicate_open_issues_headers_escalate(self):
-        # Falsification tail from the review: stale 'none' block first, fresh
-        # real-issue block second. Must not be classified from the first block.
-        r = self.run_gate(tail("DONE", "none") + "\n" + tail("DONE", "U2 review finding"))
+    def test_two_unit_window_classifies_last_report(self):
+        # A read window spanning two healthy reports must be classified from
+        # the current unit's (last) report, not merged into one.
+        r = self.run_gate(tail("DONE", "none") + "\n" + tail("DONE", "none"))
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("unit U1: DONE", r.stdout)
+
+    def test_duplicate_headers_in_final_report_escalate(self):
+        # Two Open Issues blocks inside the final report are ambiguous.
+        r = self.run_gate(
+            "Status: DONE\n\nOpen Issues:\n- none\n\nOpen Issues:\n- F3 behavior drift\n"
+        )
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("ESCALATE UNPARSEABLE (multiple Open Issues blocks, U1)", r.stdout)
+
+    def test_stale_none_before_last_report_not_done(self):
+        # Falsification tail from the review: stale 'none' block first, fresh
+        # real-issue block second. Must not be classified as clean.
+        r = self.run_gate(tail("DONE", "none") + "\n" + tail("DONE", "U2 review finding"))
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("ESCALATE DONE-with-open-issues (U1)", r.stdout)
 
     def test_needs_input_escalates(self):
         r = self.run_gate(tail("NEEDS_INPUT", "none"))
