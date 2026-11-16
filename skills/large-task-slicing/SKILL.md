@@ -441,12 +441,12 @@ Blocked / uncertain:
 
 Status: DONE|NEEDS_INPUT|BLOCKED|FAILED
 
-(Exactly one of the four values above — never the literal placeholder text
-"Status: DONE|NEEDS_INPUT|BLOCKED|FAILED" copied verbatim.)
-
 Open Issues:
 - ... or "none"
 ```
+
+Exactly one of the four status values above — never the literal placeholder
+text "Status: DONE|NEEDS_INPUT|BLOCKED|FAILED" copied verbatim.
 
 ### Completion Criteria
 
