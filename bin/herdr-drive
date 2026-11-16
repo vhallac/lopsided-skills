@@ -66,16 +66,23 @@ gate() {
 
   _status="$(printf '%s\n' "$_tail" | grep -E '^Status: ' | tail -n 1 | sed 's/^Status: *//')"
 
+  # Scope classification to the current unit's report: the read window can
+  # span two reports, so truncate to the last Status line before counting or
+  # extracting Open Issues blocks.
+  _start="$(printf '%s\n' "$_tail" | grep -nE '^Status: ' | tail -n 1 | cut -d: -f1)"
+  _report="$(printf '%s\n' "$_tail" | tail -n +"$_start")"
+
   case "$_status" in
     DONE)
-      # Exactly one Open Issues block is parseable; multiple headers mean a
-      # stale block plus a fresh one — escalate rather than read the wrong one.
-      if [ "$(printf '%s\n' "$_tail" | grep -c '^Open Issues:')" -gt 1 ]; then
+      # Exactly one Open Issues block is parseable in the final report;
+      # multiple headers mean a stale block plus a fresh one — escalate
+      # rather than read the wrong one.
+      if [ "$(printf '%s\n' "$_report" | grep -c '^Open Issues:')" -gt 1 ]; then
         echo "ESCALATE UNPARSEABLE (multiple Open Issues blocks, ${_unit})"
         printf '%s\n' "$_tail"
         return 1
       fi
-      _issues="$(printf '%s\n' "$_tail" | sed -n '/^Open Issues:/,/^$/p')"
+      _issues="$(printf '%s\n' "$_report" | sed -n '/^Open Issues:/,/^$/p')"
       if printf '%s\n' "$_issues" | grep -qiE '(^|[,:[:space:]])none([,.:[:space:]]|$)'; then
         echo "unit ${_unit}: DONE"
         return 0
