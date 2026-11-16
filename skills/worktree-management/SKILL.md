@@ -63,14 +63,18 @@ test -f <worktree>/.todo/task_plan.md && echo "PLAN OPEN" || echo "free"
 
 Refuses if a plan is open (mirror of `plan.py archive`'s refusal semantics —
 archive the plan first), and refuses while a PR is still open on the stream's
-branch (post-merge cleanup only):
+branch (post-merge cleanup only). The guarded `release` subcommand lives in
+the tested helper script (same precedence as `review-change`'s
+`scripts/worktree.sh`):
 
 ```bash
-test -f ../<repo>-wt/<stream>/.todo/task_plan.md && echo "PLAN OPEN - archive first" || exit 1
-gh pr list --head <branch> --state open | grep -q . && echo "PR STILL OPEN - merge first" || exit 1
-git worktree remove ../<repo>-wt/<stream>
-git worktree prune
+skills/worktree-management/scripts/worktree.sh release <repo-root> <stream> [<branch>]
 ```
+
+- `<repo-root>` is the main checkout path; `<branch>` (optional) is the
+  stream's branch to check for open PRs via `gh` — when omitted it is derived
+  from the worktree's HEAD, so the PR guard always runs. A `gh` failure is
+  treated as unknown PR state and refuses the release (fail closed).
 
 ## Coordination contract
 
