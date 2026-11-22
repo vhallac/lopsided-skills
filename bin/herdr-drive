@@ -64,7 +64,7 @@ gate() {
     if [ "$_lines" -lt 60 ]; then _lines=60; else _lines=120; fi
   done
 
-  _status="$(printf '%s\n' "$_tail" | grep -E '^Status: ' | tail -n 1 | sed 's/^Status: *//')"
+  _status="$(printf '%s\n' "$_tail" | grep -E '^Status: ' | tail -n 1 | sed 's/^Status: *//; s/[[:space:]]*$//')"
 
   # Scope classification to the current unit's report: the read window can
   # span two reports, so truncate to the last Status line before counting or

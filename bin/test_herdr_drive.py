@@ -81,6 +81,16 @@ class TestHerdrDriveGate(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("ESCALATE DONE-with-open-issues (U1)", r.stdout)
 
+    def test_trailing_whitespace_status_classifies_done(self):
+        r = self.run_gate(tail("DONE   ", "none"))
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("unit U1: DONE", r.stdout)
+
+    def test_padded_non_done_status_escalates_cleanly(self):
+        r = self.run_gate(tail("NEEDS_INPUT  ", "none"))
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("ESCALATE NEEDS_INPUT (U1)", r.stdout)
+
     def test_needs_input_escalates(self):
         r = self.run_gate(tail("NEEDS_INPUT", "none"))
         self.assertEqual(r.returncode, 1, r.stdout)
