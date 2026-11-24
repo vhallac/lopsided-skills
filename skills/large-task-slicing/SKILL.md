@@ -321,7 +321,7 @@ For every unit:
 3. **Apply the change.** Smallest change that completes the unit.
 4. **Verify and record.** Run the unit's `verify` command.
    - Pass → `plan.py complete <unit> <root> --evidence "<verbatim output>"` (marks done and records evidence).
-   - Fail → log the error in `findings.md`, `plan.py block <unit> <root> --kind <code|test|mechanical|requirement> --reason "<why>"`, and stop (error mode).
+   - Fail → classify the failure (`code|test|mechanical|requirement`). If it is `test`-kind and traces to artifacts this unit itself emitted (its fixtures, expectations, or setup), fix them and re-run verify before blocking. Otherwise log the error in `findings.md`, `plan.py block <unit> <root> --kind <kind> --reason "<why>"`, and stop (error mode). Fixing and re-running verify is not "repeating a failure".
 5. **Log progress.** Append to `progress.md` with action, verification output, and new state.
 6. **Save findings.** If 2+ operations produced new information, append to `findings.md`.
 7. **Amend if needed.** If new knowledge invalidates upcoming work, amend the plan (see Plan Amendments) at this unit boundary.
