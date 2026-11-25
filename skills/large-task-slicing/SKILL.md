@@ -399,11 +399,11 @@ automatically: it writes `.todo-<timestamp>.tar.gz` to the project root,
 removes `.todo/`, and reports the archive path as part of the `complete`
 output. Completion is enforced mechanically, not by remembering to clean up.
 
-`plan.py archive <project-root>` remains available as a manual command: if the
-user explicitly asks to keep `.todo/` for reference, skip the automatic archive
-by noting the deviation before completing the last unit (the archive cannot be
-undone), and use `archive` to abort a plan with user consent — do not silently
-delete findings.
+If the user explicitly asks to keep `.todo/` for reference, run
+`plan.py complete <unit> <project-root> --evidence ... --no-archive`: the unit
+completes but the automatic archive is skipped (the archive cannot be undone).
+`plan.py archive <project-root>` remains available as a manual command, and to
+abort a plan with user consent — do not silently delete findings.
 
 The archive stays as a local record — it is not committed.
 
