@@ -167,6 +167,7 @@ class TestPlanCommands(unittest.TestCase):
         root = self.make_root()
         self.init(root)
         self.add_unit(root)
+        self.add_unit(root, "Second")  # keep the plan alive past this complete
         result = self.run_plan(root, "complete", "unit-001", "--evidence", "test -f out.md -> ok")
         self.assertEqual(result.returncode, 0, result.stderr)
         text = self.plan_text(root)
@@ -186,16 +187,40 @@ class TestPlanCommands(unittest.TestCase):
         root = self.make_root()
         self.init(root)
         self.add_unit(root)
+        self.add_unit(root, "Second")
         result = self.run_plan(root, "complete", "unit-001", "--evidence", "line one\nline two\n\nline four")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.run_plan(root, "validate").returncode, 0)
         hist = self.run_plan(root, "history").stdout
         self.assertIn("line one\nline two\n\nline four", hist)
 
+    def test_complete_of_last_unit_archives_automatically(self) -> None:
+        root = self.make_root()
+        self.init(root)
+        self.add_unit(root)
+        result = self.run_plan(root, "complete", "unit-001", "--evidence", "ok")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((root / ".todo").exists())
+        archives = list((root / ".git").glob(".todo-*.tar.gz"))
+        self.assertEqual(len(archives), 1)
+        self.assertIn("OK: archived .todo/ to", result.stdout)
+        self.assertIn(str(archives[0]), result.stdout)
+
+    def test_complete_of_mid_plan_unit_does_not_archive(self) -> None:
+        root = self.make_root()
+        self.init(root)
+        self.add_unit(root)
+        self.add_unit(root, "Second")
+        result = self.run_plan(root, "complete", "unit-001", "--evidence", "ok")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((root / ".todo").is_dir())
+        self.assertNotIn("archived", result.stdout)
+
     def test_complete_refuses_terminal_unit(self) -> None:
         root = self.make_root()
         self.init(root)
         self.add_unit(root)
+        self.add_unit(root, "Second")
         self.run_plan(root, "complete", "unit-001", "--evidence", "ok")
         again = self.run_plan(root, "complete", "unit-001", "--evidence", "again")
         self.assertNotEqual(again.returncode, 0)
@@ -241,6 +266,7 @@ class TestPlanCommands(unittest.TestCase):
         root = self.make_root()
         self.init(root)
         self.add_unit(root)
+        self.add_unit(root, "Second")
         self.run_plan(root, "complete", "unit-001", "--evidence", "ok")
         result = self.run_plan(root, "cancel", "unit-001", "--reason", "x")
         self.assertNotEqual(result.returncode, 0)
@@ -264,6 +290,7 @@ class TestPlanCommands(unittest.TestCase):
         root = self.make_root()
         self.init(root)
         self.add_unit(root, "First")
+        self.add_unit(root, "Second")
         self.run_plan(root, "complete", "unit-001", "--evidence", "ok")
         hist = self.run_plan(root, "history").stdout
         self.assertIn("unit-001: added", hist)
@@ -281,8 +308,12 @@ class TestPlanCommands(unittest.TestCase):
         self.assertIn("not complete", refused.stderr)
         self.assertTrue((root / ".todo").is_dir())
 
+        self.add_unit(root, "Second")
+        # completing the remaining units archives automatically (see
+        # test_complete_of_last_unit_archives_automatically); .todo/ is gone
+        # and a manual archive would just report there is no plan.
         self.run_plan(root, "complete", "unit-001", "--evidence", "ok")
-        done = self.run_plan(root, "archive")
+        done = self.run_plan(root, "complete", "unit-002", "--evidence", "ok")
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertFalse((root / ".todo").exists())
         # the archive lands in the common git dir (worktree-safe), not root

@@ -444,7 +444,15 @@ def transition(root: Path, unit_id: str, verb: str, kind: str | None, text: str,
 
 
 def complete(root: Path, unit_id: str, evidence: str) -> str:
-    return transition(root, unit_id, "done", None, evidence, STATE_DONE)
+    result = transition(root, unit_id, "done", None, evidence, STATE_DONE)
+    text = read_plan_text(root)
+    units = find_units(text.splitlines())
+    if all(u.state in (STATE_DONE, STATE_CANCELLED) for u in units):
+        try:
+            result += "\n" + archive(root)
+        except PlanError as error:
+            result += f"\nNOTE: automatic archive failed: {error}; run `plan.py archive {root}` manually"
+    return result
 
 
 def block(root: Path, unit_id: str, kind: str, reason: str) -> str:

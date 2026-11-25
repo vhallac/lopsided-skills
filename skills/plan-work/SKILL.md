@@ -334,8 +334,8 @@ tracked:
 - **Review-remediation plans are exempt.** Plans born from review findings on
   an existing PR already have branch and PR: no head unit; the tail unit
   becomes "push fixes and comment on the PR referencing each finding."
-- The mandatory `plan.py archive` step remains the terminal unit; the tail
-  (PR) unit is always second-to-last.
+- There is no archival unit: when the last unit is completed, `plan.py
+  complete` archives the plan automatically and reports the archive path.
 
 ## Step 4 — Commit the plan and stop at the review gate
 
@@ -344,7 +344,8 @@ tracked:
    `plan.py add-unit` per contract unit from step 3 (its `input` / `scope` /
    `output` / `verify` map to `add-unit`'s flags). large-task-slicing's Required
    First Move and single-plan rule apply: resume or replace, never duplicate.
-   Every plan ends with the mandatory `plan.py archive` step.
+   Do not add an archival unit — archive happens automatically via the final
+   `plan.py complete`.
 2. Put decomposition decisions and rejected alternatives in `.todo/findings.md`,
    each marked `veto at review` where a reasonable alternative exists.
 3. Present the plan concisely — no walkthrough of how you derived it:
@@ -400,7 +401,7 @@ the rules below describe the default when no manifest is declared.
 Done when: every unit is checked (plan path) or the change is committed with
 no new red relative to the base (small path); durable findings are promoted to project
 knowledge — including any `assumption` entries that proved durable and
-load-bearing (via the findings-promotion path below); `.todo/` is archived via `plan.py archive`; and the plan path notes
+load-bearing (via the findings-promotion path below); `.todo/` is archived automatically by the final `plan.py complete`; and the plan path notes
 in findings any deviation between the estimate and what actually changed.
 After the user confirms the merge, `release` the workspace via the
 worktree-management skill (archive first — release refuses open plans).
