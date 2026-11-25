@@ -178,7 +178,7 @@ Commands:
 |---|---|
 | `init <root> --name <t> --goal\|--goal-file <g> --bounds\|--bounds-file <b>` | Create `.todo/`, the plan skeleton (guard frontmatter / Goal memory / Bounds / empty Work units), the guard file, `findings.md`, `progress.md`, and the ticket. Refuses if a plan already exists. Any `--*-file` flag accepts `-` to read its text from stdin; the inline form treats `-` as literal text. |
 | `add-unit <root> --label --input --scope --output --verify [--after <id\|frontier>]` | Add a contract unit. New ID (`unit-NNN`, never reused/renumbered), placed at the tail by default, or after `<id>`, or after `frontier` (first open unit). |
-| `complete <unit> <root> --evidence "<verbatim output>"` | Mark done **and** record the evidence. Refuses without evidence. Completing the last open unit archives the plan automatically and reports the archive path. |
+| `complete <unit> <root> --evidence "<verbatim output>"` | Mark done **and** record the evidence. Refuses without evidence and refuses an already done or cancelled unit. Completing the last open unit archives the plan automatically and reports the archive path. |
 | `block <unit> <root> --kind <code\|test\|mechanical\|requirement> --reason <why>` | Mark blocked with a failure classification. |
 | `cancel <unit> <root> --reason <why>` | Abandon an unfinished unit. Text preserved; reason appended. Refuses a done unit. |
 | `status <root>` | The projection to read each loop: current unit + contract, and open/done/blocked/cancelled buckets. |
