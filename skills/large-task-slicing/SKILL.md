@@ -178,7 +178,7 @@ Commands:
 |---|---|
 | `init <root> --name <t> --goal\|--goal-file <g> --bounds\|--bounds-file <b>` | Create `.todo/`, the plan skeleton (guard frontmatter / Goal memory / Bounds / empty Work units), the guard file, `findings.md`, `progress.md`, and the ticket. Refuses if a plan already exists. Any `--*-file` flag accepts `-` to read its text from stdin; the inline form treats `-` as literal text. |
 | `add-unit <root> --label --input --scope --output --verify [--after <id\|frontier>]` | Add a contract unit. New ID (`unit-NNN`, never reused/renumbered), placed at the tail by default, or after `<id>`, or after `frontier` (first open unit). |
-| `complete <unit> <root> --evidence "<verbatim output>"` | Mark done **and** record the evidence. Refuses without evidence and refuses terminal units. |
+| `complete <unit> <root> --evidence "<verbatim output>"` | Mark done **and** record the evidence. Refuses without evidence. Completing the last open unit archives the plan automatically and reports the archive path. |
 | `block <unit> <root> --kind <code\|test\|mechanical\|requirement> --reason <why>` | Mark blocked with a failure classification. |
 | `cancel <unit> <root> --reason <why>` | Abandon an unfinished unit. Text preserved; reason appended. Refuses a done unit. |
 | `status <root>` | The projection to read each loop: current unit + contract, and open/done/blocked/cancelled buckets. |
@@ -394,19 +394,18 @@ state.
 
 ## Plan Cleanup
 
-The final step of every plan is `plan.py archive <root>`. It refuses unless
-every unit is done or cancelled — so completion is enforced mechanically, not
-by remembering to clean up.
+Resolving the last open unit with `plan.py complete` archives the plan
+automatically: it writes `.todo-<timestamp>.tar.gz` to the project root,
+removes `.todo/`, and reports the archive path as part of the `complete`
+output. Completion is enforced mechanically, not by remembering to clean up.
 
-```sh
-python3 <skill-directory>/scripts/plan.py archive <project-root>
-```
+`plan.py archive <project-root>` remains available as a manual command: if the
+user explicitly asks to keep `.todo/` for reference, skip the automatic archive
+by noting the deviation before completing the last unit (the archive cannot be
+undone), and use `archive` to abort a plan with user consent — do not silently
+delete findings.
 
-It writes `.todo-<timestamp>.tar.gz` to the project root and removes `.todo/`.
-The archive stays as a local record — it is not committed. If the user
-explicitly asks to keep `.todo/` for reference, skip `archive` and note it as a
-deviation in the final report. If aborting a plan (with user consent), archive
-first — do not silently delete findings.
+The archive stays as a local record — it is not committed.
 
 ---
 
@@ -453,7 +452,7 @@ text "Status: DONE|NEEDS_INPUT|BLOCKED|FAILED" copied verbatim.
 Do not claim the overall task is complete until:
 
 - [ ] Every unit in the plan is done or cancelled (no open or blocked units)
-- [ ] `plan.py archive <root>` has run (`.todo/` is gone)
+- [ ] `.todo/` is gone (the final `plan.py complete` archived it automatically)
 - [ ] The archive file exists in the project root
 - [ ] Any estimate-vs-actual deviation is noted in `findings.md`
 
