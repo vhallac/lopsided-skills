@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -215,13 +216,16 @@ class TestPlanCommands(unittest.TestCase):
         self.assertTrue((root / ".todo").is_dir())
         self.assertFalse(list((root / ".git").glob(".todo-*.tar.gz")))
         self.assertIn("not archived", result.stdout)
+        self.assertIn(str(root), result.stdout)
         # the archive command still works afterwards
         arch = self.run_plan(root, "archive")
         self.assertEqual(arch.returncode, 0, arch.stderr)
         self.assertFalse((root / ".todo").exists())
 
     def test_complete_last_unit_archive_failure_degrades_to_note(self) -> None:
-        root = Path(tempfile.mkdtemp())  # no git repo -> archive() raises
+        # no git repo -> archive() raises
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, root, ignore_errors=True)
         self.init(root)
         self.add_unit(root)
         result = self.run_plan(root, "complete", "unit-001", "--evidence", "ok")

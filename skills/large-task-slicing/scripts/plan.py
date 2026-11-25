@@ -446,7 +446,7 @@ def transition(root: Path, unit_id: str, verb: str, kind: str | None, text: str,
 def complete(root: Path, unit_id: str, evidence: str, no_archive: bool = False) -> str:
     result = transition(root, unit_id, "done", None, evidence, STATE_DONE)
     if no_archive:
-        result += "\nNOTE: --no-archive given; plan not archived; run `plan.py archive {root}` to archive it"
+        result += f"\nNOTE: --no-archive given; plan not archived; run `plan.py archive {root}` to archive it"
         return result
     text = read_plan_text(root)
     units = find_units(text.splitlines())
