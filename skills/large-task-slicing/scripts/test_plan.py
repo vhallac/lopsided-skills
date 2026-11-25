@@ -206,6 +206,29 @@ class TestPlanCommands(unittest.TestCase):
         self.assertIn("OK: archived .todo/ to", result.stdout)
         self.assertIn(str(archives[0]), result.stdout)
 
+    def test_complete_last_unit_no_archive_skips_archival(self) -> None:
+        root = self.make_root()
+        self.init(root)
+        self.add_unit(root)
+        result = self.run_plan(root, "complete", "unit-001", "--evidence", "ok", "--no-archive")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((root / ".todo").is_dir())
+        self.assertFalse(list((root / ".git").glob(".todo-*.tar.gz")))
+        self.assertIn("not archived", result.stdout)
+        # the archive command still works afterwards
+        arch = self.run_plan(root, "archive")
+        self.assertEqual(arch.returncode, 0, arch.stderr)
+        self.assertFalse((root / ".todo").exists())
+
+    def test_complete_last_unit_archive_failure_degrades_to_note(self) -> None:
+        root = Path(tempfile.mkdtemp())  # no git repo -> archive() raises
+        self.init(root)
+        self.add_unit(root)
+        result = self.run_plan(root, "complete", "unit-001", "--evidence", "ok")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("NOTE: automatic archive failed", result.stdout)
+        self.assertTrue((root / ".todo").is_dir())
+
     def test_complete_of_mid_plan_unit_does_not_archive(self) -> None:
         root = self.make_root()
         self.init(root)

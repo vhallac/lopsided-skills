@@ -443,14 +443,17 @@ def transition(root: Path, unit_id: str, verb: str, kind: str | None, text: str,
     return f"OK: {unit_id} -> [{new_state}] ({verb})"
 
 
-def complete(root: Path, unit_id: str, evidence: str) -> str:
+def complete(root: Path, unit_id: str, evidence: str, no_archive: bool = False) -> str:
     result = transition(root, unit_id, "done", None, evidence, STATE_DONE)
+    if no_archive:
+        result += "\nNOTE: --no-archive given; plan not archived; run `plan.py archive {root}` to archive it"
+        return result
     text = read_plan_text(root)
     units = find_units(text.splitlines())
     if all(u.state in (STATE_DONE, STATE_CANCELLED) for u in units):
         try:
             result += "\n" + archive(root)
-        except PlanError as error:
+        except (PlanError, OSError, tarfile.TarError) as error:
             result += f"\nNOTE: automatic archive failed: {error}; run `plan.py archive {root}` manually"
     return result
 
@@ -600,6 +603,7 @@ def main() -> int:
     complete_parser.add_argument("unit")
     complete_parser.add_argument("root")
     complete_parser.add_argument("--evidence", required=True)
+    complete_parser.add_argument("--no-archive", action="store_true")
 
     block_parser = commands.add_parser("block")
     block_parser.add_argument("unit")
@@ -625,7 +629,7 @@ def main() -> int:
             contract = {key: getattr(args, key) for key in CONTRACT_KEYS}
             print(add_unit(root, args.label, contract, args.after))
         elif args.command == "complete":
-            print(complete(root, args.unit, args.evidence))
+            print(complete(root, args.unit, args.evidence, args.no_archive))
         elif args.command == "block":
             print(block(root, args.unit, args.kind, args.reason))
         elif args.command == "cancel":
