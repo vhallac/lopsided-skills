@@ -402,6 +402,61 @@ def common_git_dir(root: Path) -> Path | None:
     return Path(git_common_dir)
 
 
+def default_branch(root: Path) -> str:
+    """The repo's default branch (origin/HEAD), falling back to 'main'."""
+    try:
+        proc = subprocess.run(
+            ["git", "symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+            cwd=root, capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return "main"
+    if proc.returncode == 0 and proc.stdout.strip():
+        return proc.stdout.strip().split("/", 1)[-1]
+    return "main"
+
+
+def guard_main_checkout(root: Path, allow: bool) -> None:
+    """Refuse `init` in the main checkout or on the default branch (#91).
+
+    plan-work and worktree-management say the main checkout hosts no plans and
+    one plan per root; this turns the prose rule into a harness check. Pass
+    --allow-main for standalone large-task-slicing use outside a worktree.
+    """
+    if allow or not (root / ".git").exists():
+        return
+
+    def rev(*git_args: str) -> str | None:
+        try:
+            proc = subprocess.run(
+                ["git", *git_args], cwd=root, capture_output=True, text=True, timeout=10,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        return proc.stdout.strip() if proc.returncode == 0 else None
+
+    git_dir = rev("rev-parse", "--git-dir")
+    git_common = rev("rev-parse", "--git-common-dir")
+    branch = rev("rev-parse", "--abbrev-ref", "HEAD")
+    if git_dir and git_common:
+        if not os.path.isabs(git_dir):
+            git_dir = str(root / git_dir)
+        if not os.path.isabs(git_common):
+            git_common = str(root / git_common)
+        if Path(git_dir) == Path(git_common):
+            raise PlanError(
+                f"{root} is the repository's main worktree; plans live in a "
+                "worktree workspace (plan-work step 1.5, worktree-management). "
+                "Pass --allow-main to plan in the main checkout anyway."
+            )
+    if branch and branch != "HEAD" and branch == default_branch(root):
+        raise PlanError(
+            f"{root} is on the default branch ({branch}); plans live on a "
+            "work branch in a worktree workspace. Pass --allow-main to "
+            "plan here anyway."
+        )
+
+
 def exclude_from_git(root: Path) -> None:
     """Add .todo patterns to the repo's git exclude (see common_git_dir)."""
     common = common_git_dir(root)
@@ -423,7 +478,7 @@ def exclude_from_git(root: Path) -> None:
             existing.append(pattern)
 
 
-def init_plan(root: Path, name: str, goal: str, bounds: str) -> str:
+def init_plan(root: Path, name: str, goal: str, bounds: str, allow_main: bool = False) -> str:
     if not name.strip() or "\n" in name:
         raise PlanError("name must be one non-empty line")
     if not goal.strip() or not bounds.strip():
@@ -433,6 +488,7 @@ def init_plan(root: Path, name: str, goal: str, bounds: str) -> str:
             f"root directory {root} does not exist; create it first — "
             "init never creates the root, only .todo inside it"
         )
+    guard_main_checkout(root, allow_main)
     todo, plan = plan_paths(root)
     if plan.is_file():
         raise PlanError(
@@ -695,6 +751,7 @@ def main() -> int:
     init_parser = commands.add_parser("init")
     init_parser.add_argument("root")
     init_parser.add_argument("--name", required=True)
+    init_parser.add_argument("--allow-main", action="store_true", help="allow init in the main checkout / on the default branch")
     add_text_pair(init_parser, "goal")
     add_text_pair(init_parser, "bounds")
 
@@ -732,7 +789,7 @@ def main() -> int:
     root = Path(args.root).resolve()
     try:
         if args.command == "init":
-            print(init_plan(root, args.name, text_arg(args, "goal"), text_arg(args, "bounds")))
+            print(init_plan(root, args.name, text_arg(args, "goal"), text_arg(args, "bounds"), allow_main=args.allow_main))
         elif args.command == "add-unit":
             contract = {key: getattr(args, key) for key in CONTRACT_KEYS}
             print(add_unit(root, args.label, contract, args.after, falsify=args.falsify))

@@ -596,7 +596,9 @@ test("R2.F2 regression: non-parse read errors stay within the exit-code vocabula
   try { out = run(dir, "list"); } catch (e) { code = e.status; out = e.stdout; stderr = e.stderr; }
   assert.equal(code, 0, `list exit ${code}: ${stderr}`);
   assert.match(out, /^r1\t/);
-  assert.doesNotMatch(out, /locked/);
+  // as root the chmod is skipped and the file is readable, so `list` prints
+  // it — only assert the hiding when the chmod was actually effective
+  if (process.getuid() !== 0) assert.doesNotMatch(out, /locked/);
   // list exit stays in the vocabulary even if chmod was ineffective (root)
   assert.ok([0, 2, 3, 4].includes(code));
 });
