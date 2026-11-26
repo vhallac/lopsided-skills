@@ -57,7 +57,7 @@ type | invariant (<script>) | golden (<fixture>) | bug-lock test (<file>) | revi
 Attaches checks to intent rather than to the implementation. review-change's
 decision matrix can verify that the named check exists and runs.
 
-## Status lifecyle
+## Status lifecycle
 
 | Status | Meaning |
 |--------|---------|

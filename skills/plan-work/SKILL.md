@@ -139,6 +139,10 @@ after the fact.
   clauses state observable outcomes only, never internals.
 - A claim already covered by an existing scenario in the suite → reference
   the existing scenario, don't duplicate it.
+- A scenario must be one that **fails if only the behavior under test is
+  missing** — an input already rejected by an earlier rule (or an assertion
+  satisfied by an earlier unit's claim) cannot test the behavior this claim
+  describes; pick an input that reaches the behavior under test.
 - Weave the test requirements into the plan: units consume them as verify
   anchors and review later maps against them. Do not copy a claims table into
   the plan document.
@@ -245,9 +249,22 @@ regression test
 differential diff, or a canary run. Write a new test only when it locks a bug
 or is the named check of a decision. Never write one only so `verify` has
 something to run. If the honest check is inspection, say so and label it weak.
-For a unit that emitted claim blocks, verify includes
-`grep -l 'claim:' <test file>` — a test without its claim block above it is
-an incomplete unit, not a style matter.
+Unit `verify` must be runnable as written: target the unit's own tests (a test
+name filter or the unit's test file — never a whole-suite command) and state
+its working directory. If the base has red tests, say so in Goal memory and
+scope verify around them — a whole-suite verify that fails on the base makes
+the unit impossible to complete.
+For a unit that emitted claim blocks, verify checks **each claim id the unit
+owns** — not just any claim block. A presence-only check (`grep -l 'claim:'`)
+or an any-of check (`grep -E 'claim: x-(SC-1|EXT-2)/'`) passes when an earlier
+unit's claims satisfy it, so write the loop form:
+
+```sh
+for c in SC-1 EXT-2 BR-3; do grep -q "claim: x-$c/" <test file> || exit 1; done
+```
+
+A test without its claim block above it is an incomplete unit, not a style
+matter.
 
 `falsify` records how the executor will prove the verify could have failed —
 a unit whose verify cannot fail proves nothing. Three entry kinds:
@@ -299,7 +316,12 @@ Kinds:
   observation-backed pre-decision (e.g. "_ConfigService_ owns retry policy").
   Executors hold assumptions as entitlement-without-re-verification; if
   execution contradicts one, that is a finding plus a plan amendment — never a
-  silent workaround.
+  silent workaround. Extra information (flows, assumptions, decision-refs)
+  lives in `.todo/findings.md` under a fixed `## Extra information` heading
+  (`plan.py` owns `task_plan.md` and has no section-writing command), and any
+  unit bound to a flow or assumption lists `.todo/findings.md#extra-information`
+  in its `input` — a unit contract that references an assumption or flow
+  without naming that file as input cannot be executed fresh.
 - **`decision-ref`** — plan-level. References an accepted decision by its
   stable `NNN-topic-slug` handle from `design/decisions/` (per
   `reference/decision-format.md`), with one line on what the plan takes from it
@@ -424,17 +446,25 @@ in findings any deviation between the estimate and what actually changed.
 After the user confirms the merge, `release` the workspace via the
 worktree-management skill (archive first — release refuses open plans).
 
-### Reconcile documentation
+**Ordering constraint:** the final `plan.py complete` archives and removes
+`.todo/`, so everything that must be recorded in `.todo/findings.md` — docs
+reconciliation results, the claim grep check, the estimate-vs-actual deviation
+note, and decision promotion — happens in a **unit before the tail unit**, so
+it lands in the PR. The tail unit (push + PR) is the last thing to run.
+`plan.py archive` remains only for the `--no-archive` and abort paths.
+
+### Reconcile documentation (before the tail unit)
 
 Correct design documents named in the scope lock against what was actually
 built. Update the README and user-facing docs for changed commands, env vars,
 structure or user-visible behavior. Bug fixes and refactors trigger this only
-when they change described behavior. For the plan path, this can be a unit
-before the tail unit.
+when they change described behavior. For the plan path, this is a unit before
+the tail unit.
 
-### Promote durable findings
+### Promote durable findings (before the tail unit)
 
-Before archiving `.todo/`, check every claim promoted during the plan is
+Before the tail unit runs (while `.todo/` still exists), check every claim
+promoted during the plan is
 grep-verifiable in a committed test (`grep -rn 'claim:' <test paths>` against
 the scratchpad's executable claims), then review `findings.md` and promote claims that hold
 beyond this task into `design/decisions/`. Task-specific errors and dead ends
@@ -455,6 +485,6 @@ them to `accepted` at merge.
 Then update `design/decisions/README.md` — one indexed line per decision:
 `NNN — topic — Status`.
 
-After promotion, archive with `plan.py archive`. The `.todo-<timestamp>.tar.gz`
-stays as provenance; the promoted decisions become project knowledge that the
-next plan's scope lock will consult.
+The promoted decisions become project knowledge that the next plan's scope
+lock will consult. Do not run `plan.py archive` here — the final `plan.py
+complete` archives automatically.

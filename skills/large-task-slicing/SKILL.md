@@ -125,7 +125,7 @@ Hand-edit freely. Include the verification command output verbatim here — this
 is where the full multi-line output lives when the plan's `done` event carries
 only the anchor evidence.
 
-```markdown
+~~~markdown
 # Progress: [Task name]
 
 ## YYYY-MM-DD
@@ -138,7 +138,7 @@ only the anchor evidence.
   [output]
   ```
 - **State after:** unit-001 checked, N remaining
-```
+~~~
 
 Update after every unit — do not batch multiple units into one entry.
 
@@ -276,18 +276,23 @@ The plan will be created with `plan.py` (3 files: task_plan.md, findings.md, pro
 
 > **Gate:** Do not run `plan.py init` until the work unit, verification, and
 > stop rule are explicit AND the user has consented (or already consented to
-> the decomposition).
+> the decomposition). When the **plan-work** skill is driving, plan-work's
+> review gate replaces this pre-`init` consent — build the plan, present it,
+> and stop at plan-work's gate. The consent step here applies only when
+> large-task-slicing is used on its own.
 
 After consent, build the plan through the script — never by hand:
 
 ```sh
 python3 <skill-directory>/scripts/plan.py init <project-root> \
   --name "<task>" --goal-file <goal.md> --bounds-file <bounds.md>
+```
 
 Any `--*-file` flag (goal and bounds) accepts `-` to
 read its text from stdin (e.g. piped text); the inline form treats `-` as
 literal text.
 
+```sh
 python3 <skill-directory>/scripts/plan.py add-unit <project-root> \
   --label "<label>" --input "<input>" --scope "<scope>" \
   --output "<output>" --verify "<verify>"
@@ -414,7 +419,7 @@ The archive stays as a local record — it is not committed.
 
 After each bounded run:
 
-```markdown
+~~~markdown
 ## Progress update
 
 Completed:
@@ -443,7 +448,7 @@ Status: DONE|NEEDS_INPUT|BLOCKED|FAILED
 
 Open Issues:
 - ... or "none"
-```
+~~~
 
 Exactly one of the four status values above — never the literal placeholder
 text "Status: DONE|NEEDS_INPUT|BLOCKED|FAILED" copied verbatim.
@@ -453,9 +458,12 @@ text "Status: DONE|NEEDS_INPUT|BLOCKED|FAILED" copied verbatim.
 Do not claim the overall task is complete until:
 
 - [ ] Every unit in the plan is done or cancelled (no open or blocked units)
+- [ ] Any estimate-vs-actual deviation was noted in `findings.md` **before the
+      tail unit completed** (completing the last unit archives and removes
+      `.todo/`, so anything that must be recorded there happens in an earlier
+      unit)
 - [ ] `.todo/` is gone (the final `plan.py complete` archived it automatically)
 - [ ] The archive file exists in the project root
-- [ ] Any estimate-vs-actual deviation is noted in `findings.md`
 
 ---
 
@@ -466,8 +474,9 @@ requires platform-level hooks. Instead:
 
 - **Within a session:** The execution loop (step 1: `plan.py status`) ensures the
   plan state is re-read every iteration.
-- **Across rounds:** Use `mini_mem__add` to store a reference to the active
-  `.todo/` plan. The next round's context will include the working memory slot.
+- **Across rounds:** If a working-memory tool is available (e.g.
+  `mini_mem__add`), store a reference to the active `.todo/` plan. The next
+  round's context will include the working memory slot.
 - **Manual resume:** If the LLM has no context of the plan, the user can say
   "continue the plan in .todo/" and the skill's single-plan enforcement will
   pick it up via `plan.py status`.

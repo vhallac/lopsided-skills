@@ -34,10 +34,12 @@ class TestPlanCommands(unittest.TestCase):
             check=False,
         )
 
-    def init(self, root: Path, name: str = "Task") -> subprocess.CompletedProcess[str]:
-        return self.run_plan(
-            root, "init", "--name", name, "--goal", GOAL, "--bounds", BOUNDS
-        )
+    def init(self, root: Path, name: str = "Task", *extra: str,
+             allow_main: bool = True) -> subprocess.CompletedProcess[str]:
+        args = [root, "init", "--name", name, "--goal", GOAL, "--bounds", BOUNDS]
+        if allow_main:
+            args.append("--allow-main")
+        return self.run_plan(*args, *extra)
 
     def add_unit(self, root: Path, label: str = "Do the thing", *extra: str) -> subprocess.CompletedProcess[str]:
         return self.run_plan(
@@ -121,6 +123,42 @@ class TestPlanCommands(unittest.TestCase):
         second = self.init(root)
         self.assertNotEqual(second.returncode, 0)
         self.assertIn("already exists", second.stderr)
+
+    # --- init main-checkout guard (#91) ---
+
+    def test_init_refuses_main_worktree(self) -> None:
+        root = self.make_root()  # a fresh `git init` repo is its main worktree
+        result = self.init(root, allow_main=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("main worktree", result.stderr)
+        # the guard is advisory: --allow-main proceeds
+        self.assertEqual(self.init(root, "Task").returncode, 0)
+
+    def test_init_refuses_default_branch(self) -> None:
+        root = Path(tempfile.mkdtemp())
+        subprocess.run(["git", "init", "-q", "-b", "master", str(root)], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["git", "-C", str(root), "commit", "--allow-empty",
+                        "-qm", "seed"], check=True, stdout=subprocess.DEVNULL)
+        wt = root.parent / (root.name + "-wt")
+        # a linked worktree whose branch is named 'main' (plan.py's default-
+        # branch fallback) is refused even though it is not the main worktree
+        subprocess.run(["git", "-C", str(root), "worktree", "add", "-b",
+                        "main", str(wt)], check=True, stdout=subprocess.DEVNULL)
+        result = self.init(wt, allow_main=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("default branch", result.stderr)
+
+    def test_init_in_linked_worktree_on_work_branch_succeeds(self) -> None:
+        root = self.make_root()
+        subprocess.run(["git", "-C", str(root), "commit", "--allow-empty",
+                        "-qm", "seed"], check=True, stdout=subprocess.DEVNULL)
+        wt = root.parent / (root.name + "-wt")
+        subprocess.run(["git", "-C", str(root), "worktree", "add", "-b",
+                        "fix/thing", str(wt)], check=True, stdout=subprocess.DEVNULL)
+        result = self.init(wt, allow_main=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((wt / ".todo" / "task_plan.md").is_file())
 
     # --- add-unit ---
 
@@ -536,7 +574,7 @@ class TestStdinAlias(unittest.TestCase):
         result = self.run_plan_input(
             GOAL,
             "init", "--name", "T", "--goal-file", "-", "--bounds", BOUNDS,
-            str(root),
+            "--allow-main", str(root),
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(GOAL, (root / ".todo" / "task_plan.md").read_text(encoding="utf-8"))
@@ -546,11 +584,11 @@ class TestStdinAlias(unittest.TestCase):
         goal_file.write_text(GOAL, encoding="utf-8")
         root_a = self.make_root()
         via_stdin = self.run_plan_input(
-            GOAL, "init", "--name", "T", "--goal-file", "-", "--bounds", BOUNDS, str(root_a)
+            GOAL, "init", "--name", "T", "--goal-file", "-", "--bounds", BOUNDS, "--allow-main", str(root_a)
         )
         root_b = self.make_root()
         via_file = self.run_plan_input(
-            "", "init", "--name", "T", "--goal-file", str(goal_file), "--bounds", BOUNDS, str(root_b)
+            "", "init", "--name", "T", "--goal-file", str(goal_file), "--bounds", BOUNDS, "--allow-main", str(root_b)
         )
         self.assertEqual(via_stdin.returncode, 0, via_stdin.stderr)
         self.assertEqual(via_file.returncode, 0, via_file.stderr)
@@ -561,7 +599,7 @@ class TestStdinAlias(unittest.TestCase):
     def test_inline_dash_is_literal(self) -> None:
         root = self.make_root()
         result = self.run_plan_input(
-            "piped", "init", "--name", "T", "--goal", "-", "--bounds", "b", str(root)
+            "piped", "init", "--name", "T", "--goal", "-", "--bounds", "b", "--allow-main", str(root)
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         text = (root / ".todo" / "task_plan.md").read_text(encoding="utf-8")
