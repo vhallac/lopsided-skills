@@ -235,6 +235,7 @@ Write each unit as a contract — it is the handoff to a fresh session:
   - scope: <the change; the scope lock's must-not-change applies>
   - output: <what exists after>
   - verify: <one command>
+  - falsify: <mutation | input | none: reason>
 ```
 
 `verify` checks the unit's output against an anchor: a claim's claim block in
@@ -247,6 +248,23 @@ something to run. If the honest check is inspection, say so and label it weak.
 For a unit that emitted claim blocks, verify includes
 `grep -l 'claim:' <test file>` — a test without its claim block above it is
 an incomplete unit, not a style matter.
+
+`falsify` records how the executor will prove the verify could have failed —
+a unit whose verify cannot fail proves nothing. Three entry kinds:
+
+- **`mutation:`** — a reversible change at a named location, expected to make
+  verify fail in the named way. Pays off where a passing check would otherwise
+  be vacuous: bug fixes, validators, guards, invariants.
+- **`input:`** — a rejected or misclassified input run through verify, with the
+  expected outcome. Stays in the tree as a negative test. Preferred over
+  mutation where the negative case is expressible as data — fixtures, mocks,
+  golden/differential inputs.
+- **`none:`** — no falsifier, with a required reason (e.g. pure documentation
+  change, verify is the inspection itself). A bare `none` without a reason is
+  not a valid entry.
+
+Prefer `input` over `mutation` when both apply; reserve `none` for units where
+failure injection genuinely has no meaning.
 
 ### Extra information (optional)
 
