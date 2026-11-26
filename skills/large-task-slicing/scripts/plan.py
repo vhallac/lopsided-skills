@@ -46,6 +46,7 @@ PLAN_FRONTMATTER = (
 )
 
 CONTRACT_KEYS = ("input", "scope", "output", "verify")
+FALSIFY_KINDS = ("mutation", "input", "none")
 BLOCK_KINDS = ("code", "test", "mechanical", "requirement")
 
 # Checkbox state -> meaning, derived from the unit's last event:
@@ -53,7 +54,7 @@ BLOCK_KINDS = ("code", "test", "mechanical", "requirement")
 STATE_OPEN, STATE_DONE, STATE_BLOCKED, STATE_CANCELLED = " ", "x", "!", "-"
 
 UNIT_HEADER_RE = re.compile(r"^- \[([ x!-])\] (unit-\d+) — (.+)$")
-CONTRACT_RE = re.compile(r"^  - (input|scope|output|verify): (.*)$")
+CONTRACT_RE = re.compile(r"^  - (input|scope|output|verify|falsify): (.*)$")
 EVENT_RE = re.compile(
     r"^  - (added|done|blocked|cancelled) (\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)"
     r"( \[[a-z]+\])?: (.*)$"
@@ -92,6 +93,59 @@ class Validation:
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+# --- falsifiers -------------------------------------------------------------
+
+def validate_falsify_entry(entry: str, where: str) -> None:
+    """Validate one `falsify` entry: `<kind>[: text]` with per-kind rules.
+
+    - kind must be mutation, input, or none
+    - none carries only a reason and requires it
+    - mutation/input carry `label: expected failure` so `complete --falsify-outcome`
+      can match outcomes to them by label
+    """
+    kind, sep, text = entry.partition(":")
+    if kind.strip() not in FALSIFY_KINDS:
+        raise PlanError(
+            f"{where}: falsify kind must be one of: {', '.join(FALSIFY_KINDS)}"
+        )
+    text = text.strip()
+    if kind.strip() == "none":
+        if not text:
+            raise PlanError(f"{where}: falsify kind `none` requires a reason")
+        return
+    if not sep:
+        raise PlanError(
+            f"{where}: falsify entry {entry!r} must be `<kind>: label: expected failure` "
+            "(mutation/input) or `none: reason`"
+        )
+    label, sep2, rest = text.partition(":")
+    if not label.strip() or (not rest.strip() and not sep2):
+        raise PlanError(
+            f"{where}: falsify entry {entry!r} must be `<kind>: label: expected failure` "
+            "(mutation/input) or `none: reason`"
+        )
+
+
+def falsify_entries(contract: dict[str, str]) -> list[str]:
+    raw = contract.get("falsify", "")
+    return raw.splitlines() if raw else []
+
+
+def validate_falsify_entries(contract: dict[str, str], where: str) -> None:
+    for entry in falsify_entries(contract):
+        validate_falsify_entry(entry, where)
+
+
+def falsify_labels(contract: dict[str, str]) -> list[str]:
+    """Labels of declared mutation/input falsifiers, in declaration order."""
+    labels: list[str] = []
+    for entry in falsify_entries(contract):
+        kind, _, text = entry.partition(":")
+        if kind.strip() in ("mutation", "input"):
+            labels.append(text.strip().partition(":")[0].strip())
+    return labels
 
 
 # --- paths and ticket -------------------------------------------------------
@@ -187,7 +241,10 @@ def parse_subitems(lines: list[str], unit: Unit) -> tuple[dict[str, str], list[E
             return
         text = "\n".join(parts)
         if kind == "contract":
-            contract[key] = text
+            if key == "falsify":  # falsify repeats; join entries with newlines
+                contract[key] = f"{contract[key]}\n{text}" if key in contract else text
+            else:
+                contract[key] = text
         else:
             events.append(Event(verb, ts, tag, text, line_no))
         kind, parts = None, []
@@ -259,6 +316,10 @@ def validate_text(text: str) -> Validation:
                 result.errors.append(
                     f"{PLAN_FILE}:{event.line + 1}: blocked event has invalid kind {event.kind!r}"
                 )
+        try:
+            validate_falsify_entries(contract, where)
+        except PlanError as error:
+            result.errors.append(str(error))
         wanted = expected_state(events)
         if unit.state != wanted:
             result.errors.append(
@@ -277,7 +338,7 @@ def require_valid(text: str) -> Validation:
 
 # --- rendering --------------------------------------------------------------
 
-def render_unit_block(unit_id: str, label: str, contract: dict[str, str], added_note: str) -> list[str]:
+def render_unit_block(unit_id: str, label: str, contract: dict[str, str], added_note: str, falsify: list[str] | None = None) -> list[str]:
     if not label.strip() or "\n" in label:
         raise PlanError("label must be one non-empty line")
     out = [f"- [ ] {unit_id} — {label.strip()}"]
@@ -286,6 +347,9 @@ def render_unit_block(unit_id: str, label: str, contract: dict[str, str], added_
         if not value.strip() or "\n" in value:
             raise PlanError(f"{key} must be one non-empty line")
         out.append(f"  - {key}: {value.strip()}")
+    for entry in falsify or []:
+        validate_falsify_entry(entry, unit_id)
+        out.append(f"  - falsify: {entry}")
     out.append(f"  - added {now_iso()}: {added_note}")
     return out
 
@@ -380,7 +444,7 @@ def init_plan(root: Path, name: str, goal: str, bounds: str) -> str:
     return f"OK: initialized .todo/ for {name.strip()!r} (0 units)"
 
 
-def add_unit(root: Path, label: str, contract: dict[str, str], after: str | None) -> str:
+def add_unit(root: Path, label: str, contract: dict[str, str], after: str | None, falsify: list[str] | None = None) -> str:
     todo, _plan = plan_paths(root)
     ensure_guard(todo)
     text = read_plan_text(root)
@@ -405,7 +469,7 @@ def add_unit(root: Path, label: str, contract: dict[str, str], after: str | None
         target = find_unit(lines, anchor)
         note, insert_at = f"placed after {target.id}", block_end(lines, target)
 
-    lines[insert_at:insert_at] = render_unit_block(unit_id, label, contract, note)
+    lines[insert_at:insert_at] = render_unit_block(unit_id, label, contract, note, falsify)
     candidate = "\n".join(lines) + "\n"
     require_valid(candidate)
 
@@ -443,7 +507,39 @@ def transition(root: Path, unit_id: str, verb: str, kind: str | None, text: str,
     return f"OK: {unit_id} -> [{new_state}] ({verb})"
 
 
-def complete(root: Path, unit_id: str, evidence: str, no_archive: bool = False) -> str:
+def complete(root: Path, unit_id: str, evidence: str, no_archive: bool = False, falsify_outcomes: list[str] | None = None) -> str:
+    outcomes = falsify_outcomes or []
+    for outcome in outcomes:
+        label, _, rest = outcome.partition(":")
+        if not label.strip() or not rest.strip():
+            raise PlanError(
+                f"falsify-outcome {outcome!r} must be `label: observed failure`"
+            )
+    text = read_plan_text(root)
+    lines = text.splitlines()
+    unit = find_unit(lines, unit_id)
+    contract, _events = parse_subitems(lines, unit)
+    declared = falsify_labels(contract)
+    seen: list[str] = []
+    for outcome in outcomes:
+        label = outcome.partition(":")[0].strip()
+        if label not in declared:
+            raise PlanError(
+                f"falsify-outcome names label {label!r}, which unit {unit_id} "
+                "does not declare (declared: " + (", ".join(declared) or "none") + ")"
+            )
+        if label in seen:
+            raise PlanError(f"duplicate falsify-outcome for label {label!r}")
+        seen.append(label)
+    missing = [label for label in declared if label not in seen]
+    if missing:
+        raise PlanError(
+            f"{unit_id} declares falsifier(s) without recorded outcomes: "
+            + ", ".join(missing)
+            + "; pass --falsify-outcome 'label: observed failure' for each before completing"
+        )
+    if outcomes:
+        evidence = "\n".join([evidence, *[f"falsify-outcome: {o}" for o in outcomes]])
     result = transition(root, unit_id, "done", None, evidence, STATE_DONE)
     if no_archive:
         result += f"\nNOTE: --no-archive given; plan not archived; run `plan.py archive {root}` to archive it"
@@ -597,12 +693,14 @@ def main() -> int:
     add_parser.add_argument("--label", required=True)
     for key in CONTRACT_KEYS:
         add_parser.add_argument(f"--{key}", required=True)
+    add_parser.add_argument("--falsify", action="append", default=[], metavar="KIND[: LABEL:] TEXT", help="declared falsifier; repeatable (mutation/input/none)")
     add_parser.add_argument("--after", help="a unit ID, or `frontier` for the first open unit")
 
     complete_parser = commands.add_parser("complete")
     complete_parser.add_argument("unit")
     complete_parser.add_argument("root")
     complete_parser.add_argument("--evidence", required=True)
+    complete_parser.add_argument("--falsify-outcome", action="append", default=[], metavar="LABEL: OBSERVED FAILURE", help="recorded falsifier outcome; repeatable, one per declared mutation/input falsifier")
     complete_parser.add_argument("--no-archive", action="store_true")
 
     block_parser = commands.add_parser("block")
@@ -627,9 +725,9 @@ def main() -> int:
             print(init_plan(root, args.name, text_arg(args, "goal"), text_arg(args, "bounds")))
         elif args.command == "add-unit":
             contract = {key: getattr(args, key) for key in CONTRACT_KEYS}
-            print(add_unit(root, args.label, contract, args.after))
+            print(add_unit(root, args.label, contract, args.after, falsify=args.falsify))
         elif args.command == "complete":
-            print(complete(root, args.unit, args.evidence, args.no_archive))
+            print(complete(root, args.unit, args.evidence, args.no_archive, falsify_outcomes=args.falsify_outcome))
         elif args.command == "block":
             print(block(root, args.unit, args.kind, args.reason))
         elif args.command == "cancel":

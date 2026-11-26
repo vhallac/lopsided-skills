@@ -410,6 +410,106 @@ class TestPlanCommands(unittest.TestCase):
         self.assertIn("does not match its last event", result.stderr)
 
 
+    # --- falsify (issue-85) ---
+
+    # claim: issue-85-SC-1/none-falsifier-requires-a-reason/test_add_unit_rejects_none_falsifier_without_reason
+    # claim text: an add-unit falsify entry of kind `none` without a reason is rejected; `none:` with a non-empty reason is accepted
+    # scenario: Scenario: none falsifier requires a reason — When add-unit is called with falsify "none" and no reason Then add-unit is rejected with an error naming the missing reason; Scenario: none falsifier with reason is accepted — When add-unit is called with falsify "none: pure rename; compiler is the guard" Then the unit record contains that falsify entry verbatim
+    def test_add_unit_rejects_none_falsifier_without_reason(self) -> None:
+        root = self.make_root()
+        self.init(root)
+        for bad in ("none", "none:", "none:   "):
+            result = self.add_unit(root, "Bad", "--falsify", bad)
+            self.assertNotEqual(result.returncode, 0, bad)
+            self.assertIn("requires a reason", result.stderr)
+            self.assertEqual(self.run_plan(root, "validate").returncode, 0)
+        good = self.add_unit(root, "Good", "--falsify", "none: pure rename; compiler is the guard")
+        self.assertEqual(good.returncode, 0, good.stderr)
+        self.assertIn(
+            "  - falsify: none: pure rename; compiler is the guard",
+            self.plan_text(root),
+        )
+
+    def test_add_unit_rejects_unknown_falsify_kind(self) -> None:
+        root = self.make_root()
+        self.init(root)
+        result = self.add_unit(root, "Bad", "--falsify", "bogus: something went wrong")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("kind must be one of", result.stderr)
+
+    # claim: issue-85-SC-2/complete-refuses-without-recorded-falsifier-outcomes/test_complete_falsify_outcome_enforcement
+    # claim text: a unit declaring mutation/input falsifiers is refused at complete until every declared falsifier has a recorded outcome; once all outcomes are recorded the unit completes and the outcomes appear in the event trail
+    # scenario: Scenario: complete refuses without recorded falsifier outcomes — When complete is called with evidence but no falsify-outcome Then complete is refused and the unit stays open; Scenario: complete accepts once all outcomes are recorded — When complete is called with evidence and a matching falsify-outcome Then the unit is done and the outcome appears in the event trail
+    def test_complete_falsify_outcome_enforcement(self) -> None:
+        root = self.make_root()
+        self.init(root)
+        result = self.add_unit(
+            root,
+            "Guarded",
+            "--falsify", "mutation: flip-guard: verify must fail with assertion error",
+            "--falsify", "input: dup-label: verify must flag the duplicate",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.add_unit(root, "Second")  # keep the plan alive past this complete
+        # refused while outcomes are missing; unit stays open
+        refused = self.run_plan(root, "complete", "unit-001", "--evidence", "ok")
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("without recorded outcomes", refused.stderr)
+        self.assertIn("flip-guard", refused.stderr)
+        self.assertIn("- [ ] unit-001", self.plan_text(root))
+        # one of two outcomes is still not enough
+        partial = self.run_plan(
+            root, "complete", "unit-001", "--evidence", "ok",
+            "--falsify-outcome", "flip-guard: verify failed with assertion error",
+        )
+        self.assertNotEqual(partial.returncode, 0)
+        self.assertIn("dup-label", partial.stderr)
+        # an outcome for an undeclared label is a typo, not a pass
+        unknown = self.run_plan(
+            root, "complete", "unit-001", "--evidence", "ok",
+            "--falsify-outcome", "nope: nothing",
+            "--falsify-outcome", "flip-guard: verify failed with assertion error",
+            "--falsify-outcome", "dup-label: verify flagged the duplicate",
+        )
+        self.assertNotEqual(unknown.returncode, 0)
+        self.assertIn("does not declare", unknown.stderr)
+        # all outcomes recorded -> completion succeeds and outcomes hit the trail
+        done = self.run_plan(
+            root, "complete", "unit-001", "--evidence", "verify ok",
+            "--falsify-outcome", "flip-guard: verify failed with assertion error",
+            "--falsify-outcome", "dup-label: verify flagged the duplicate",
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertIn("- [x] unit-001", self.plan_text(root))
+        hist = self.run_plan(root, "history").stdout
+        self.assertIn("falsify-outcome: flip-guard: verify failed with assertion error", hist)
+        self.assertIn("falsify-outcome: dup-label: verify flagged the duplicate", hist)
+        self.assertEqual(self.run_plan(root, "validate").returncode, 0)
+
+    # claim: issue-85-SC-3/declared-falsifiers-render-next-to-verify-and-survive-round-trips/test_falsify_entries_render_next_to_verify_and_survive_roundtrips
+    # claim text: a unit's declared falsify entries render in task_plan.md next to the verify line and survive validate/history round-trips
+    # scenario: Scenario: declared falsifiers render next to verify and survive round-trips — Given a unit declaring one mutation and one input falsifier Then task_plan.md lists each falsify entry under the unit And validate and history report the plan as valid
+    def test_falsify_entries_render_next_to_verify_and_survive_roundtrips(self) -> None:
+        root = self.make_root()
+        self.init(root)
+        result = self.add_unit(
+            root,
+            "Guarded",
+            "--falsify", "mutation: flip-guard: verify must fail",
+            "--falsify", "input: bad-input: verify must reject it",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        text = self.plan_text(root)
+        self.assertIn("  - falsify: mutation: flip-guard: verify must fail", text)
+        self.assertIn("  - falsify: input: bad-input: verify must reject it", text)
+        verify_at = text.index("  - verify: test -f out.md")
+        self.assertGreater(text.index("  - falsify: mutation"), verify_at)
+        self.assertEqual(self.run_plan(root, "validate").returncode, 0)
+        # the recorded entries survive a history round-trip and re-validation
+        self.assertEqual(self.run_plan(root, "re-ticket").returncode, 0)
+        self.assertEqual(self.run_plan(root, "validate").returncode, 0)
+        self.assertIn("flip-guard", self.plan_text(root))
+
 class TestStdinAlias(unittest.TestCase):
     """'-' as --<key>-file reads stdin; inline '-' stays literal."""
 
