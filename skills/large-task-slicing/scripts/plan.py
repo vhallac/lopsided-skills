@@ -121,7 +121,7 @@ def validate_falsify_entry(entry: str, where: str) -> None:
             "(mutation/input) or `none: reason`"
         )
     label, sep2, rest = text.partition(":")
-    if not label.strip() or (not rest.strip() and not sep2):
+    if not label.strip() or not rest.strip():
         raise PlanError(
             f"{where}: falsify entry {entry!r} must be `<kind>: label: expected failure` "
             "(mutation/input) or `none: reason`"

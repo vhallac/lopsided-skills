@@ -475,6 +475,18 @@ class TestPlanCommands(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("kind must be one of", result.stderr)
 
+    # claim: pr95-R1.F2/mutation-falsifier-with-empty-expected-failure-is-rejected/test_add_unit_rejects_empty_expected_failure
+    # claim text: a mutation/input falsify entry with an empty expected-failure text after the second colon is rejected at add-unit (pr-95 review R1.F2)
+    # scenario: Scenario: empty expected failure is rejected — When add-unit is called with falsify "mutation: flip-guard:" Then add-unit is rejected naming the missing expected failure; Scenario: non-empty expected failure is still accepted — When add-unit is called with falsify "mutation: flip-guard: verify must fail" Then the unit is added
+    def test_add_unit_rejects_empty_expected_failure(self) -> None:
+        root = self.make_root()
+        self.init(root)
+        result = self.add_unit(root, "Bad", "--falsify", "mutation: flip-guard:")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must be `<kind>: label: expected failure`", result.stderr)
+        good = self.add_unit(root, "Good", "--falsify", "mutation: flip-guard: verify must fail")
+        self.assertEqual(good.returncode, 0, good.stderr)
+
     # claim: issue-85-SC-2/complete-refuses-without-recorded-falsifier-outcomes/test_complete_falsify_outcome_enforcement
     # claim text: a unit declaring mutation/input falsifiers is refused at complete until every declared falsifier has a recorded outcome; once all outcomes are recorded the unit completes and the outcomes appear in the event trail
     # scenario: Scenario: complete refuses without recorded falsifier outcomes — When complete is called with evidence but no falsify-outcome Then complete is refused and the unit stays open; Scenario: complete accepts once all outcomes are recorded — When complete is called with evidence and a matching falsify-outcome Then the unit is done and the outcome appears in the event trail
