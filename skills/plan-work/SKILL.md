@@ -332,6 +332,13 @@ enforcement**: no new verification mode. A plan that needs no artifacts omits
 the section. The container is extensible: other kinds may earn their place
 later without changing the section.
 
+Extra information (flows, assumptions, decision-refs) lives in
+`.todo/findings.md` under a fixed `## Extra information` heading (`plan.py`
+owns `task_plan.md` and has no section-writing command), and any unit bound
+to a flow or assumption lists `.todo/findings.md#extra-information` in its
+`input` — a unit contract that references an assumption or flow without
+naming that file as input cannot be executed fresh.
+
 ```
 ## Extra information
 
@@ -355,12 +362,7 @@ Kinds:
   observation-backed pre-decision (e.g. "_ConfigService_ owns retry policy").
   Executors hold assumptions as entitlement-without-re-verification; if
   execution contradicts one, that is a finding plus a plan amendment — never a
-  silent workaround. Extra information (flows, assumptions, decision-refs)
-  lives in `.todo/findings.md` under a fixed `## Extra information` heading
-  (`plan.py` owns `task_plan.md` and has no section-writing command), and any
-  unit bound to a flow or assumption lists `.todo/findings.md#extra-information`
-  in its `input` — a unit contract that references an assumption or flow
-  without naming that file as input cannot be executed fresh.
+  silent workaround.
 - **`decision-ref`** — plan-level. References an accepted decision by its
   stable `NNN-topic-slug` handle from `design/decisions/` (per
   `reference/decision-format.md`), with one line on what the plan takes from it

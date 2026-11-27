@@ -176,7 +176,7 @@ Commands:
 
 | Command | Semantics |
 |---|---|
-| `init <root> --name <t> --goal\|--goal-file <g> --bounds\|--bounds-file <b>` | Create `.todo/`, the plan skeleton (guard frontmatter / Goal memory / Bounds / empty Work units), the guard file, `findings.md`, `progress.md`, and the ticket. Refuses if a plan already exists. Any `--*-file` flag accepts `-` to read its text from stdin; the inline form treats `-` as literal text. |
+| `init <root> --name <t> --goal\|--goal-file <g> --bounds\|--bounds-file <b>` `[--allow-main]` | Create `.todo/`, the plan skeleton (guard frontmatter / Goal memory / Bounds / empty Work units), the guard file, `findings.md`, `progress.md`, and the ticket. Refuses if a plan already exists. Refuses `init` in the main checkout or on the default branch unless `--allow-main` is passed (escape hatch for standalone use outside a worktree). Any `--*-file` flag accepts `-` to read its text from stdin; the inline form treats `-` as literal text. |
 | `add-unit <root> --label --input --scope --output --verify [--after <id\|frontier>]` | Add a contract unit. New ID (`unit-NNN`, never reused/renumbered), placed at the tail by default, or after `<id>`, or after `frontier` (first open unit). |
 | `complete <unit> <root> --evidence "<verbatim output>"` | Mark done **and** record the evidence. Refuses without evidence and refuses an already done or cancelled unit. Completing the last open unit archives the plan automatically and reports the archive path. |
 | `block <unit> <root> --kind <code\|test\|mechanical\|requirement> --reason <why>` | Mark blocked with a failure classification. |
@@ -287,6 +287,10 @@ After consent, build the plan through the script — never by hand:
 python3 <skill-directory>/scripts/plan.py init <project-root> \
   --name "<task>" --goal-file <goal.md> --bounds-file <bounds.md>
 ```
+
+In a worktree workspace this just works. When running standalone outside a
+worktree (main checkout, default branch), `init` refuses — pass `--allow-main`
+to override deliberately.
 
 Any `--*-file` flag (goal and bounds) accepts `-` to
 read its text from stdin (e.g. piped text); the inline form treats `-` as
