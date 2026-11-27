@@ -212,7 +212,10 @@ function waitErrorResult(message) {
  * session was replaced: rebinds the old session's undelivered requests to
  * the replacement session so pending replies deliver to the replacement.
  * Without this explicit call the replacement NEVER receives the old
- * session's replies (EXT-4d).
+ * session's replies (EXT-4d). Both roles are covered (issue#161): requests
+ * the pane SENT (requester identity) and requests dispatched TO the pane
+ * (worker identity — without the latter the replacement session could never
+ * agent_reply its pre-restart requests).
  */
 function rebindExecute(options) {
   return async (_toolCallId, params) => {

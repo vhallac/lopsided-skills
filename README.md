@@ -59,6 +59,7 @@ mailbox show --id r1                  # full record, JSON
 mailbox pause --id r1                 # hold delivery (settable by any client)
 mailbox resume --id r1
 mailbox rebind --id r1 --requester q2 # explicit requester rebind
+mailbox rebind --id r1 --worker w2    # explicit worker rebind (restarted worker)
 mailbox cancel --id r1                # stop the expectation; no delivery
 ```
 
@@ -82,7 +83,8 @@ Delivery semantics:
 - **Identity change** — a `consume` from an identity other than the registered
   requester is refused until an explicit `rebind`.
 - **Worker guard** — replies from an identity other than the dispatched worker
-  are rejected and kept inspectable on the record.
+  are rejected and kept inspectable on the record. A restarted worker recovers
+  only through an explicit worker rebind (`rebind --worker`).
 
 Exit codes: `0` success, `2` usage error, `3` rejected (semantic refusal),
 `4` not found.
@@ -119,7 +121,7 @@ Tools:
 | `agent_request` | Register + dispatch a request to a worker pane; returns a `requestId` immediately with a reply obligation. Unknown or unbound worker panes are rejected before any store mutation. |
 | `agent_wait` | Block until the reply for a `requestId` is available (bounded poll loop in the extension — no LLM rounds consumed), or return "no outcome yet" on timeout without consuming the reply. |
 | `agent_reply` | Worker side: submit a `status` (`DONE`, `NEEDS_INPUT`, `BLOCKED`, `FAILED`) and `report` for a dispatched `requestId`. Replies from an identity other than the dispatched worker are rejected. |
-| `agent_rebind` | After a pane restart, bind the pane's pending requests from the old session identity to the replacement session. |
+| `agent_rebind` | After a pane restart, bind the pane's pending requests from the old session identity to the replacement session — both as requester (requests the pane sent) and as worker (requests dispatched to it, so the replacement can reply). |
 
 Delivery: when a reply settles while the requester is idle or between tool
 rounds, the extension starts exactly one follow-up round attributed to the
