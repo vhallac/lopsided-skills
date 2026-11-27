@@ -354,6 +354,15 @@ test("agent_rebind after double restart rebinds the full replacement chain (S1 a
 // walked requester identities, and the mailbox rebind command only rebound
 // record.requester. Now the worker role is rebound too: the replacement
 // session can settle its pre-restart requests.
+/**
+ * Claim block (issue#161):
+ *   claim id: mailbox-ext-RC-4/worker-role
+ *   claim: agent_rebind rebinds the worker identity of a replaced pane (issue#161)
+ *   scenario: When a dispatched worker pane's session is replaced and the
+ *     operator (or replacement session) calls agent_rebind for the pane
+ *     Then the pending request's worker identity is rebound to the replacement
+ *     And the replacement session's late reply is accepted and deliverable
+ */
 test("issue#161: agent_rebind on a replaced worker pane rebinds the worker identity so the late reply is accepted", async () => {
   const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-rebind-"));
   await bindPane({ mailboxDir, paneName: "worker-w", sessionId: "sess-w1" });
@@ -388,6 +397,45 @@ test("issue#161: agent_rebind on a replaced worker pane rebinds the worker ident
   const shown = JSON.parse((await runMailbox({ mailboxDir, args: ["show", "--id", requestId] })).stdout);
   assert.equal(shown.reply.status, "DONE");
   assert.equal(shown.worker, "sess-w2");
+});
+
+// issue#161 + R1.F2 regression: one rebindPaneRequests call rebinds BOTH
+// roles, and a request the pane both sent and replies on must appear in the
+// rebound list exactly once — never duplicated across the role passes.
+/**
+ * Claim block (issue#161):
+ *   claim id: mailbox-ext-RC-4/both-roles-snapshot
+ *   claim: one rebindPaneRequests call rebinds requester and worker roles and reports each requestId once (issue#161, R1.F2)
+ *   scenario: When a pane is both the requester and the worker of a pending
+ *     request and its session is replaced
+ *     Then a single agent_rebind rebinds the request for both roles
+ *     And the reported rebound list contains the requestId exactly once
+ */
+test("issue#161: rebindPaneRequests rebinds both roles of a self-requesting pane without duplicating the rebound id", async () => {
+  const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-rebind-"));
+  await bindPane({ mailboxDir, paneName: "solo", sessionId: "sess-1" });
+  // The pane requests from itself: requester and worker identity are equal
+  // (the CLI permits this), so one rebind must settle both roles.
+  const { requestId } = await dispatchRequest({
+    mailboxDir, worker: "solo", instruction: "self work", requesterIdentity: "sess-1",
+  });
+
+  await recordReplacement({ mailboxDir, paneName: "solo", fromSessionId: "sess-1", toSessionId: "sess-2" });
+  await bindPane({ mailboxDir, paneName: "solo", sessionId: "sess-2" });
+
+  const pi = fakePi();
+  agentMailboxExtension(pi, { mailboxDir, paneName: "solo", sessionId: "sess-2" });
+  const tool = pi.registered.find((t) => t.name === "agent_rebind");
+  const result = await tool.execute("tc-161-dedupe", { pane: "solo" });
+  assert.equal(result.details.error, undefined);
+  // Exactly once: the worker-role pass must not duplicate the requester-role hit.
+  assert.deepEqual(result.details.rebound, [requestId]);
+
+  // Both identities really moved: the replacement can settle the request.
+  await replyOutcome({ mailboxDir, requestId, status: "DONE", report: "late", workerPane: "solo" });
+  const shown = JSON.parse((await runMailbox({ mailboxDir, args: ["show", "--id", requestId] })).stdout);
+  assert.equal(shown.reply.status, "DONE");
+  assert.equal(shown.worker, "sess-2");
 });
 
 // R1.F4 regression: two concurrent bindPane calls (real child processes) must
