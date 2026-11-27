@@ -76,13 +76,16 @@ Wait is not a manager operation: the only wait anywhere in this prompt is
    directive verbatim as the agent's work order (if the directive names an
    issue, the agent loads that issue; otherwise the directive itself is the
    work input), run the `plan-work` skill, and follow its sizing: small →
-   solve directly and report; larger → produce the review-gated plan written
-   to disk under `.todo/` in the agent's cwd (`.todo` is gitignored — NEVER
-   `git add`/`git commit` it). The plan header MUST carry the issue
-   reference when the directive names one, and the directive text otherwise.
-   On completion the agent reports the plan file path, the issue number or
-   directive, and the number of units in the plan (for the small path: a
-   `solved directly` report instead), and stops.
+   propose the change and stop for the operator's go (reply `NEEDS_INPUT`
+   with the `## Small change` block), unless the directive already says
+   "just do it" (then the go is given — solve directly and report). Larger →
+   produce the review-gated plan written to disk under `.todo/` in the
+   agent's cwd (`.todo` is gitignored — NEVER `git add`/`git commit` it).
+   The plan header MUST carry the issue reference when the directive names
+   one, and the directive text otherwise. On completion the agent reports,
+   for the larger path, the plan file path, the issue number or directive,
+   and the number of units in the plan (for the small path: the proposed
+   `## Small change` block instead), and stops.
 
 2. **Resolve the worker identity and pane address, then dispatch the kickoff
    as a correlated request and block on its outcome:**
@@ -125,16 +128,21 @@ Wait is not a manager operation: the only wait anywhere in this prompt is
 3. **Gate on the reply's status:**
 
    - `DONE` → report back to the operator: agent name, task (issue reference
-     or directive), plan path, number of units (parse them from the report;
-     for a solved-directly small task, report that it was closed directly).
-   - `NEEDS_INPUT` or `BLOCKED` → surface the agent's questions verbatim and
-     stop. Do not attempt to answer on the operator's behalf, and do not
-     start execution.
+     or directive), plan path, number of units (parse them from the report).
+     A small task the directive already authorized is reported the same way,
+     as `solved directly`.
+   - `NEEDS_INPUT` → surface the agent's report verbatim and stop. This is
+     the normal small-path outcome: the proposal is the deliverable, and the
+     go to execute it must come from the operator. Do not attempt to answer
+     on the operator's behalf, and do not start execution.
+   - `BLOCKED` → surface the agent's questions verbatim and stop. Do not
+     attempt to answer on the operator's behalf, and do not start execution.
    - `FAILED` or a stopped-without-result outcome → treat as blocked: report
      the failure and stop.
 
-This prompt ends at plan construction for the larger path; a small issue
-may be solved directly and reported. Execution of a produced plan is driven
-by /plan-drive —
+This prompt ends at plan construction for the larger path, and at the small
+change proposal for the small path — both wait for the operator; only a
+small task the directive already authorized is solved directly. Execution of
+a produced plan is driven by /plan-drive —
 pass it the resolved mailbox identity (not the agent name alone) as its
 argument.

@@ -21,7 +21,7 @@ Skip this skill:
 ## The flow
 
 ```
-classify → estimate → small? act directly (branch check first)
+classify + branch → estimate → small? propose → go → act
                     → else: workspace → scope lock → claims + test requirements → work units → plan + review gate → execute
 ```
 
@@ -34,8 +34,20 @@ behavior).
 - Feature → read `reference/feature-design.md`; apply it in steps 2–3.
 - Bugfix → read `reference/bugfix.md`; apply it in steps 2–3.
 
-Report the first line as `Type: feature | bugfix — profile loaded` so a skipped
-profile read is detectable downstream.
+**Decide the branch mode here, before sizing**, so the small route cannot skip
+it (this is where review-remediation work must resolve to the open PR's
+branch):
+
+- **attach** — review remediation for an open PR (the request names a PR/MR, or
+  cites review findings): discover the PR branch with
+  `gh pr view <n> --json headRefName`; both routes use it as the workspace.
+- **create** — new-issue work: a branch from the default branch, a worktree if
+  isolation or parallel streams need it.
+- **none** — no branch needed (a question, read-only research).
+
+Report one line: `Type: feature | bugfix — profile loaded; branch: create |
+attach <branch> | none`, so a skipped profile read or branch decision is
+detectable downstream.
 
 ## Step 1 — Estimate size (before anything else)
 
@@ -56,29 +68,49 @@ Output:
 the observed ~200-line optimum for an unstructured change; above it, changes
 stop fitting a small round.
 
-Small → state the estimate and a one-line approach, then continue:
+Small → **propose, then stop for the go.** State, in plain terms, exactly what
+will change:
+
+```
+## Small change — <task>
+- Files to modify: <paths> (N files)
+- Estimated changed lines: ~N
+- Approach: <one line>
+- Actions: <each concrete mutation, one per line — e.g. "delete folder X">
+```
+
+Then stop. MUST NOT execute before the user's go. This is the failure the
+skill exists to prevent: "make a plan to delete folder X" must not delete X
+before the user can copy it. Exception: if the user already said "just do it"
+for this change, the go is already given — state the block, then proceed in
+the same turn.
+
+Branch/workspace: consume the step-0 branch decision — an `attach` workspace
+is used as-is; for `create`, apply the worktree-management skill's branch
+check (a branch in place is fine for a short-lived single session; a worktree
+when isolation or parallel streams need it).
+
+After the go:
 
 - If the requested deliverable is the change itself (fix/implement/ship) →
-  implement it now under the Gating Rules below. No plan file. If it spans a
-  few steps, keep one mini_mem slot listing the remaining steps. Branch rule:
-  the change starts with the worktree-management skill's branch check — a
-  branch in place is fine for a short-lived single session; use a worktree
-  workspace if the user wants isolation or other streams are running.
-- If the requested deliverable is a plan document → present the estimate plus
-  a one-page approach and stop.
+  implement it under the Gating Rules below. No plan file. If it spans a few
+  steps, keep one mini_mem slot listing the remaining steps.
+- If the requested deliverable is a plan document → the block above is the
+  deliverable; stop.
 
 Not small → planning path (steps 2–5). Record the estimate in `.todo/findings.md`
 once the plan exists. The estimate is an input, not a contract: if execution
 reveals a much larger blast radius, stop and re-plan rather than quietly
 growing the change.
 
-## Step 1.5 — Workspace (plan path only)
+## Step 1.5 — Workspace (plan path)
 
 Before scope lock, give the plan an isolated root via the worktree-management
-skill: `create` a worktree (new branch from the default branch) for new-issue
-plans; `attach` an existing PR branch for review-remediation plans. All
-subsequent steps run with root = the workspace path — `.todo/` is born inside
-it, and `plan.py init` in step 4 targets the workspace, not the main checkout.
+skill, **consuming the step-0 branch decision**: `create` a worktree (new
+branch from the default branch) for `create`, or `attach` the PR branch for
+`attach`. All subsequent steps run with root = the workspace path — `.todo/`
+is born inside it, and `plan.py init` in step 4 targets the workspace, not the
+main checkout.
 Record the workspace path and branch in the plan skeleton's Goal memory.
 
 The main checkout hosts no plans; it stays the review/merge surface.
@@ -418,6 +450,10 @@ the rules below describe the default when no manifest is declared.
   other remote transition happen only on the user's explicit go. For plan-path
   new-issue work, plan approval is the explicit go for the standard tail (PR)
   unit — executed only after all other units are done (see Step 3).
+- **Destructive actions:** deleting, overwriting, moving, dropping, or
+  force-rewriting existing state never happens on inference. Name exactly what
+  will be removed and wait for an explicit go — on both paths, even after a
+  plan is approved, when the action was not in the approved plan.
 - Label verification honestly: inspection-only checks are reported as weak,
   not dressed up as command evidence.
 
