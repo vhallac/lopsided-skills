@@ -71,18 +71,27 @@ export async function latestReplacement(mailboxDir, paneName) {
 }
 
 /**
- * Explicitly rebind every undelivered request whose registered requester is
- * fromIdentity to toIdentity, via `mailbox rebind` (RC-4). Only undelivered
- * records are touched — a reply already delivered stays delivered (exactly
- * once is mailbox-backed). Returns { rebound: [requestIds] }.
+ * Explicitly rebind every undelivered request whose registered identity in
+ * the given role ("requester" or "worker") is fromIdentity to toIdentity,
+ * via `mailbox rebind` (RC-4). Only undelivered records are touched — a reply
+ * already delivered stays delivered (exactly once is mailbox-backed).
+ * Returns { rebound: [requestIds] }.
+ *
+ * Both roles matter (issue#161): a restarted pane can be stuck either as the
+ * REQUESTER of pending requests (delivery matches requester identity) or as
+ * the WORKER (agent_reply matches the dispatched worker identity). Only the
+ * requester role was rebound before issue#161; a restarted worker could never
+ * settle its pre-restart requests.
  */
-export async function rebindRequester({
+export async function rebindRole({
   mailboxDir,
+  role,
   fromIdentity,
   toIdentity,
   runMailbox: runMailboxImpl = defaultRunMailbox,
 }) {
   if (!mailboxDir) throw new TypeError("mailboxDir required");
+  if (role !== "requester" && role !== "worker") throw new TypeError(`invalid role "${role}"`);
   if (!fromIdentity || typeof fromIdentity !== "string") throw new TypeError("fromIdentity required");
   if (!toIdentity || typeof toIdentity !== "string") throw new TypeError("toIdentity required");
   const listed = await runMailboxImpl({ mailboxDir, args: ["list"] });
@@ -103,11 +112,11 @@ export async function rebindRequester({
     } catch {
       continue;
     }
-    if (record.requester !== fromIdentity) continue;
+    if (record[role] !== fromIdentity) continue;
     if (record.delivered) continue; // already delivered exactly once — leave it
     const result = await runMailboxImpl({
       mailboxDir,
-      args: ["rebind", "--id", requestId, "--requester", toIdentity],
+      args: ["rebind", "--id", requestId, `--${role}`, toIdentity],
     });
     // Exit 0 ("rebound ...") or the explicit already-bound no-op both mean
     // the request is now bound to toIdentity; anything else is a failure.
@@ -121,6 +130,11 @@ export async function rebindRequester({
   return { rebound };
 }
 
+/** Requester-role rebind (kept for compatibility with existing callers). */
+export function rebindRequester(options) {
+  return rebindRole({ ...options, role: "requester" });
+}
+
 /**
  * Rebind a replacement pane's pending requests: walks the FULL replacement
  * chain recorded for paneName — not just the latest replacement — and rebinds
@@ -128,10 +142,18 @@ export async function rebindRequester({
  * journal to toIdentity (default: the replacement session the latest
  * replacement recorded). This covers double rapid restarts (S1 → S2 → S3):
  * requests registered by S1 must become deliverable after the rebind, not
- * only those registered by S2. Returns { rebound, replacement } (replacement
- * = the latest entry, with the effective target) or null when no replacement
- * was recorded for the pane (nothing to rebind — also the safe answer for a
- * pane that was never rebound).
+ * only those registered by S2.
+ *
+ * Both roles are rebound (issue#161): requests the pane SENT (requester
+ * identity) and requests dispatched TO the pane (worker identity — without
+ * this the replacement session cannot agent_reply them). A request can
+ * appear in both lists only if the pane requested from and replied on the
+ * same identity; the mailbox rebind no-op keeps that consistent.
+ *
+ * Returns { rebound, replacement } (replacement = the latest entry, with the
+ * effective target) or null when no replacement was recorded for the pane
+ * (nothing to rebind — also the safe answer for a pane that was never
+ * rebound).
  */
 export async function rebindPaneRequests({
   mailboxDir,
@@ -149,14 +171,45 @@ export async function rebindPaneRequests({
   // (oldest first) with duplicates dropped.
   const fromIdentities = [...new Set(entries.map((entry) => entry.from))];
   const rebound = [];
-  for (const fromIdentity of fromIdentities) {
-    const result = await rebindRequester({
-      mailboxDir,
-      fromIdentity,
-      toIdentity: target,
-      runMailbox: runMailboxImpl,
-    });
-    rebound.push(...result.rebound);
+  // One list + one show per id, shared by both roles: extra subprocess calls
+  // would widen the window for concurrent delivery probes to settle records
+  // mid-rebind (observed as a flaky full-suite run), so records are read once
+  // and both role passes rebind from that snapshot.
+  const listed = await runMailboxImpl({ mailboxDir, args: ["list"] });
+  if (listed.code !== 0) {
+    throw new TypeError(`mailbox list failed (exit ${listed.code}): ${(listed.stderr || listed.stdout).trim()}`);
+  }
+  const ids = listed.stdout
+    .split("\n")
+    .map((line) => line.split("\t")[0].trim())
+    .filter(Boolean);
+  const records = [];
+  for (const requestId of ids) {
+    const shown = await runMailboxImpl({ mailboxDir, args: ["show", "--id", requestId] });
+    if (shown.code !== 0) continue;
+    try {
+      records.push({ requestId, record: JSON.parse(shown.stdout) });
+    } catch {
+      continue;
+    }
+  }
+  for (const role of ["requester", "worker"]) {
+    for (const fromIdentity of fromIdentities) {
+      for (const { requestId, record } of records) {
+        if (record[role] !== fromIdentity) continue;
+        if (record.delivered) continue; // already delivered exactly once — leave it
+        const result = await runMailboxImpl({
+          mailboxDir,
+          args: ["rebind", "--id", requestId, `--${role}`, target],
+        });
+        if (
+          result.code === 0 &&
+          (result.stdout.startsWith("rebound ") || result.stdout.includes("already bound"))
+        ) {
+          rebound.push(requestId);
+        }
+      }
+    }
   }
   return { rebound, replacement: { ...replacement, to: target } };
 }

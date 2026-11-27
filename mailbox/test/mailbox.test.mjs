@@ -420,6 +420,43 @@ test("requester identity change refuses delivery until explicit rebind", () => {
   assert.equal(record.rebinds[0].from, "q1");
 });
 
+test("issue#161: a replaced worker rebinds its worker identity and its late reply is accepted", () => {
+  const dir = makeDir();
+  run(dir, "register", "--id", "r1", "--requester", "q1", "--worker", "w1", "--instruction", "i");
+  run(dir, "dispatch", "--id", "r1");
+
+  // worker pane restarted: the replacement identity cannot bind a reply
+  const err = runExpectFailure(dir, "reply", "--id", "r1", "--worker", "w2", "--status", "DONE", "--report", "late");
+  assert.match(err.stderr, /does not match the dispatched worker identity "w1"/);
+  assert.equal(JSON.parse(run(dir, "show", "--id", "r1")).reply, null);
+
+  // explicit worker-role rebind — the only path back for the replacement session
+  assert.match(run(dir, "rebind", "--id", "r1", "--worker", "w2"), /rebound r1 to worker "w2"/);
+  assert.match(run(dir, "reply", "--id", "r1", "--worker", "w2", "--status", "DONE", "--report", "late"), /reply recorded for r1 \(DONE\)/);
+  const record = JSON.parse(run(dir, "show", "--id", "r1"));
+  assert.equal(record.worker, "w2");
+  assert.equal(record.reply.status, "DONE");
+  assert.equal(record.rebinds.length, 1);
+  assert.equal(record.rebinds[0].role, "worker");
+  assert.equal(record.rebinds[0].from, "w1");
+  assert.equal(record.rebinds[0].to, "w2");
+  // requester delivery unaffected
+  assert.match(run(dir, "consume", "--id", "r1", "--requester", "q1"), /delivered reply for r1: DONE/);
+});
+
+test("issue#161: rebind requires exactly one of --requester or --worker", () => {
+  const dir = makeDir();
+  run(dir, "register", "--id", "r1", "--requester", "q1", "--worker", "w1", "--instruction", "i");
+  const neither = runExpectFailure(dir, "rebind", "--id", "r1");
+  assert.equal(neither.status, 2);
+  assert.match(neither.stderr, /exactly one of --requester or --worker/);
+  const both = runExpectFailure(dir, "rebind", "--id", "r1", "--requester", "q2", "--worker", "w2");
+  assert.equal(both.status, 2);
+  assert.match(both.stderr, /exactly one of --requester or --worker/);
+  // same-identity worker rebind is a no-op like the requester one
+  assert.match(run(dir, "rebind", "--id", "r1", "--worker", "w1"), /already bound to worker "w1"/);
+});
+
 test("R1.F1 regression: registration after cancel supersedes the cancelled record", () => {
   const dir = makeDir();
   run(dir, "register", "--id", "r1", "--requester", "q1", "--worker", "w1", "--instruction", "first");

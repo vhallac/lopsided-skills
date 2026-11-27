@@ -350,6 +350,46 @@ test("agent_rebind after double restart rebinds the full replacement chain (S1 a
   assert.equal(sent.length, 2);
 });
 
+// issue#161: a restarted WORKER pane was stuck forever — agent_rebind only
+// walked requester identities, and the mailbox rebind command only rebound
+// record.requester. Now the worker role is rebound too: the replacement
+// session can settle its pre-restart requests.
+test("issue#161: agent_rebind on a replaced worker pane rebinds the worker identity so the late reply is accepted", async () => {
+  const mailboxDir = await mkdtemp(join(tmpdir(), "agent-mailbox-rebind-"));
+  await bindPane({ mailboxDir, paneName: "worker-w", sessionId: "sess-w1" });
+  const { requestId } = await dispatchRequest({
+    mailboxDir, worker: "worker-w", instruction: "do the thing", requesterIdentity: "sess-driver",
+  });
+
+  // The worker pane restarts: journal records sess-w1 -> sess-w2 and the new
+  // session binds the pane.
+  await recordReplacement({ mailboxDir, paneName: "worker-w", fromSessionId: "sess-w1", toSessionId: "sess-w2" });
+  await bindPane({ mailboxDir, paneName: "worker-w", sessionId: "sess-w2" });
+
+  // Before the rebind the replacement cannot reply (worker identity mismatch).
+  let rejected = false;
+  try {
+    await replyOutcome({ mailboxDir, requestId, status: "DONE", report: "late", workerPane: "worker-w" });
+  } catch {
+    rejected = true;
+  }
+  assert.ok(rejected, "expected the pre-rebind reply to be rejected");
+
+  // The exact recovery call from the issue: agent_rebind(pane="worker-w").
+  const pi = fakePi();
+  agentMailboxExtension(pi, { mailboxDir, paneName: "worker-w", sessionId: "sess-w2" });
+  const tool = pi.registered.find((t) => t.name === "agent_rebind");
+  const result = await tool.execute("tc-161", { pane: "worker-w" });
+  assert.equal(result.details.error, undefined);
+  assert.deepEqual(result.details.rebound, [requestId]);
+
+  // The late reply from the replacement session is now accepted and deliverable.
+  await replyOutcome({ mailboxDir, requestId, status: "DONE", report: "late", workerPane: "worker-w" });
+  const shown = JSON.parse((await runMailbox({ mailboxDir, args: ["show", "--id", requestId] })).stdout);
+  assert.equal(shown.reply.status, "DONE");
+  assert.equal(shown.worker, "sess-w2");
+});
+
 // R1.F4 regression: two concurrent bindPane calls (real child processes) must
 // not lose each other's write. Sequential tests cannot exercise the
 // interleaving (decision 013: verify concurrency only with real concurrent

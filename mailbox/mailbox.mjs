@@ -34,7 +34,7 @@ Usage:
   mailbox consume --id <requestId> --requester <identity>
   mailbox pause --id <requestId>
   mailbox resume --id <requestId>
-  mailbox rebind --id <requestId> --requester <new-identity>
+  mailbox rebind --id <requestId> (--requester <new-identity> | --worker <new-identity>)
   mailbox cancel --id <requestId>
 
 Environment:
@@ -96,7 +96,7 @@ const KNOWN_OPTIONS = {
   consume: ["id", "requester"],
   pause: ["id"],
   resume: ["id"],
-  rebind: ["id", "requester"],
+  rebind: ["id", "requester", "worker"],
   cancel: ["id"],
 };
 
@@ -318,20 +318,27 @@ async function main(argv) {
       break;
     }
     case "rebind": {
-      requireOpts(opts, ["id", "requester"]);
+      // Exactly one of --requester / --worker: the role whose identity is
+      // being rebound (issue#161: a restarted WORKER pane was previously
+      // unrecoverable — only requester rebinding existed).
+      if (!opts.requester === !opts.worker) {
+        throw new CommandExit(STATUS_EXIT.usage, "rebind requires exactly one of --requester or --worker");
+      }
+      const role = opts.requester ? "requester" : "worker";
+      const identity = opts.requester ?? opts.worker;
       await withLock(dir, opts.id, async () => {
         const record = await load(dir, opts.id);
         if (!record) throw new CommandExit(STATUS_EXIT.notFound, `no request "${opts.id}"`);
-        if (record.requester === opts.requester) {
-          console.log(`request ${opts.id} already bound to requester "${opts.requester}" (no-op)`);
+        if (record[role] === identity) {
+          console.log(`request ${opts.id} already bound to ${role} "${identity}" (no-op)`);
           return;
         }
         // Explicit rebind is the only path past the identity-change refusal.
         record.rebinds ??= [];
-        record.rebinds.push({ from: record.requester, to: opts.requester, at: new Date().toISOString() });
-        record.requester = opts.requester;
+        record.rebinds.push({ role, from: record[role], to: identity, at: new Date().toISOString() });
+        record[role] = identity;
         await save(dir, record);
-        console.log(`rebound ${opts.id} to requester "${opts.requester}"`);
+        console.log(`rebound ${opts.id} to ${role} "${identity}"`);
       });
       break;
     }
