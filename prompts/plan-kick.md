@@ -1,6 +1,6 @@
 ---
 description: Kick off a plan agent via the terminal manager and have it construct a plan for an issue
-argument-hint: "<agent-name> <issue-ref> [-- directives]"
+argument-hint: "<agent-name> <issue-ref> <directives...>"
 ---
 
 The plan is always built from the project root: the cwd of the session
@@ -14,10 +14,10 @@ identity as the `worker` for `agent_request` and when handing off to
 /plan-drive. If `$1` does not fit the manager's `--name` charset, report
 NEEDS_INPUT — never mangle the name.
 
-Kick off and plan: agent $1, issue $2. Anything after `--` is an operator
-directive: pass it to the agent verbatim as additional context alongside the
-issue. Directives carry the operator's decisions and constraints — do not
-paraphrase or re-prioritize them.
+Kick off and plan: agent $1, issue $2. Anything after the issue ref is an
+operator directive: pass it to the agent verbatim as additional context
+alongside the issue. Directives carry the operator's decisions and
+constraints — do not paraphrase or re-prioritize them.
 
 Requires the agent-mailbox pi extension in this session (`agent_request`,
 `agent_wait` tools available). If they are not, report NEEDS_INPUT saying so —
