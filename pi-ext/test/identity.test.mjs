@@ -408,7 +408,7 @@ test("issue#161: agent_rebind on a replaced worker pane rebinds the worker ident
 // rebound list exactly once — never duplicated across the role passes.
 /**
  * Claim block (issue#161):
- *   claim id: mailbox-ext-RC-4/both-roles-snapshot
+ *   claim id: mailbox-ext-RC-4/both-roles-rebound
  *   claim: one rebindPaneRequests call rebinds requester and worker roles and reports each requestId once (issue#161, R1.F2)
  *   scenario: When a pane is both the requester and the worker of a pending
  *     request and its session is replaced
@@ -440,6 +440,9 @@ test("issue#161: rebindPaneRequests rebinds both roles of a self-requesting pane
   const shown = JSON.parse((await runMailbox({ mailboxDir, args: ["show", "--id", requestId] })).stdout);
   assert.equal(shown.reply.status, "DONE");
   assert.equal(shown.worker, "sess-2");
+  // The requester role really moved too (R2.F1: make the "both roles" claim
+  // falsifiable — assert the requesting identity was rebound as well).
+  assert.equal(shown.requester, "sess-2");
 });
 
 // R1.F4 regression: two concurrent bindPane calls (real child processes) must
