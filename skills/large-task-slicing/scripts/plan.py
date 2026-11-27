@@ -134,8 +134,18 @@ def falsify_entries(contract: dict[str, str]) -> list[str]:
 
 
 def validate_falsify_entries(contract: dict[str, str], where: str) -> None:
+    seen: set[str] = set()
     for entry in falsify_entries(contract):
         validate_falsify_entry(entry, where)
+        kind, _, text = entry.partition(":")
+        if kind.strip() in ("mutation", "input"):
+            label = text.strip().partition(":")[0].strip()
+            if label in seen:
+                raise PlanError(
+                    f"{where}: duplicate falsify label {label!r} — one outcome "
+                    "per declared falsifier; give each entry a distinct label"
+                )
+            seen.add(label)
 
 
 def falsify_labels(contract: dict[str, str]) -> list[str]:

@@ -430,6 +430,29 @@ class TestPlanCommands(unittest.TestCase):
             self.plan_text(root),
         )
 
+    # claim: pr94-R1.F1/duplicate-falsify-labels-are-rejected-at-add-unit/test_add_unit_rejects_duplicate_falsify_labels
+    # claim text: two falsify entries on the same unit reusing the same label are rejected at add-unit; distinct labels are accepted (pr-94 review R1.F1)
+    # scenario: Scenario: duplicate falsify labels are rejected — When add-unit declares two entries sharing a label Then add-unit is rejected naming the duplicate label; Scenario: distinct labels are accepted — When add-unit declares entries with distinct labels Then the unit is added and validate passes
+    def test_add_unit_rejects_duplicate_falsify_labels(self) -> None:
+        root = self.make_root()
+        self.init(root)
+        result = self.add_unit(
+            root,
+            "Bad",
+            "--falsify", "mutation: x: verify must fail with assertion error",
+            "--falsify", "input: x: verify must flag the duplicate",
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("duplicate falsify label 'x'", result.stderr)
+        good = self.add_unit(
+            root,
+            "Good",
+            "--falsify", "mutation: flip-guard: verify must fail with assertion error",
+            "--falsify", "input: dup-label: verify must flag the duplicate",
+        )
+        self.assertEqual(good.returncode, 0, good.stderr)
+        self.assertEqual(self.run_plan(root, "validate").returncode, 0)
+
     def test_add_unit_rejects_unknown_falsify_kind(self) -> None:
         root = self.make_root()
         self.init(root)

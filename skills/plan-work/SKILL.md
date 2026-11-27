@@ -263,6 +263,13 @@ a unit whose verify cannot fail proves nothing. Three entry kinds:
   change, verify is the inspection itself). A bare `none` without a reason is
   not a valid entry.
 
+The `falsify` field is repeatable: a unit may declare several entries, one per
+falsifier, each with a distinct label (`mutation: label: expected failure`).
+At completion the executor records one outcome per declared mutation/input
+falsifier; a `none` outcome is recorded as `label: none — <reason>`. The
+outcome evidence format is owned by large-task-slicing — see its SKILL.md
+falsifier rules.
+
 Prefer `input` over `mutation` when both apply; reserve `none` for units where
 failure injection genuinely has no meaning.
 
