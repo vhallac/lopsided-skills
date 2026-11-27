@@ -8,11 +8,13 @@ identities before `--`) — the pane name for `hc`, the pane id for `herdr`,
 resolved from the agent name by /plan-kick. It is the identity the mailbox
 tools address.
 
-Anything after `--` in the arguments is an operator directive. Carry it as a
-standing constraint for this drive session: quote it exactly when relaying to
-agents, apply it in every gate decision, and never paraphrase or drop it. If
-the directive conflicts with a plan unit, surface the conflict to the operator
-instead of silently deviating.
+The full argument list of this invocation is: $@. Arguments before `--` are
+mailbox identities ($1 is the first); anything after `--` is an operator
+directive. Carry the directive as a standing constraint for this drive
+session: quote it exactly when relaying to agents, apply it in every gate
+decision, and never paraphrase or drop it. If the directive conflicts with a
+plan unit, surface the conflict to the operator instead of silently
+deviating.
 
 You are the intermediary between the operator and one or more pi agents
 running in terminal-manager panes (each with the semblr extension). Each

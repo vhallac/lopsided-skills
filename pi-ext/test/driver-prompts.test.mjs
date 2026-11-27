@@ -143,3 +143,30 @@ test("C4: plan-drive drives to completion by default", () => {
   );
   assert.match(drive, /A worker `DONE` on unit U<n> means you\n  dispatch U<n\+1> immediately/);
 });
+
+/**
+ * claim: driver-prompts-plan-kick-directive/test_directive_rendered_not_issue_centric
+ * claim text: plan-kick treats everything after the agent name as a
+ *   free-form task directive and renders it via ${@:2}, so a non-issue
+ *   directive (e.g. `/plan-kick pr-95-review fix the review findings of
+ *   pr 95`) reaches the agent verbatim; the issue reference is optional
+ *   within the directive. plan-drive renders its full argument list via $@
+ *   so operator directives after `--` survive expansion.
+ * scenario: Scenario: non-issue directive survives expansion — Given the
+ *   invocation `/plan-kick pr-95-review fix the review findings of pr 95`
+ *   When the template text is inspected Then the expansion paragraph
+ *   references agent $1 followed by the ${@:2} remainder And no line still
+ *   addresses the second argument as an issue ref
+ */
+test("C5: plan-kick renders the task directive; plan-drive renders directives", () => {
+  const kick = readPrompt("plan-kick.md");
+  const hint = kick.split("\n").find((l) => l.startsWith("argument-hint:")) ?? "";
+  assert.doesNotMatch(hint, /issue-ref/);
+  assert.match(hint, /<agent-name> <task-directive\.\.\.>/);
+  assert.match(kick, /agent \$1, task: \$\{@:2\}/);
+  assert.doesNotMatch(kick, /issue \$2/);
+
+  const drive = readPrompt("plan-drive.md");
+  assert.match(drive, /argument list of this invocation is: \$@/);
+  assert.match(drive, /anything after `--` is an operator\s+directive/);
+});

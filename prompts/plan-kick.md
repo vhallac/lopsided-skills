@@ -1,6 +1,6 @@
 ---
-description: Kick off a plan agent via the terminal manager and have it construct a plan for an issue
-argument-hint: "<agent-name> <issue-ref> <directives...>"
+description: Kick off a plan agent via the terminal manager and have it construct a plan from the operator's task directive
+argument-hint: "<agent-name> <task-directive...>"
 ---
 
 The plan is always built from the project root: the cwd of the session
@@ -14,10 +14,15 @@ identity as the `worker` for `agent_request` and when handing off to
 /plan-drive. If `$1` does not fit the manager's `--name` charset, report
 NEEDS_INPUT — never mangle the name.
 
-Kick off and plan: agent $1, issue $2. Anything after the issue ref is an
-operator directive: pass it to the agent verbatim as additional context
-alongside the issue. Directives carry the operator's decisions and
-constraints — do not paraphrase or re-prioritize them.
+Kick off and plan: agent $1, task: ${@:2}.
+
+The task directive — everything after the agent name — is the agent's work
+order, not necessarily an issue reference. It may name an issue (then that
+issue is what the agent loads) or be a free-form instruction in its own
+right ("fix the review findings of PR 95"); in that case the directive
+itself is the work input. Pass it verbatim: directives carry the operator's
+decisions and constraints — do not paraphrase, re-prioritize, or drop any
+of it.
 
 Requires the agent-mailbox pi extension in this session (`agent_request`,
 `agent_wait` tools available). If they are not, report NEEDS_INPUT saying so —
@@ -59,14 +64,17 @@ Wait is not a manager operation: the only wait anywhere in this prompt is
    above. No prompt argument: the worker runs in this session's cwd = the
    project root.
 
-   Build the kickoff message inline: it must instruct the agent to load issue
-   $2 (plus any extra context), run the `plan-work` skill, and follow its
-   sizing: small → solve directly and report; larger → produce the
-   review-gated plan written to disk under `.todo/` in the agent's cwd
-   (`.todo` is gitignored — NEVER `git add`/`git commit` it). The plan header
-   MUST carry the issue reference. On completion the agent reports the plan
-   file path, the issue number, and the number of units in the plan (for the
-   small path: a `solved directly` report instead), and stops.
+   Build the kickoff message inline: it must quote the operator's task
+   directive verbatim as the agent's work order (if the directive names an
+   issue, the agent loads that issue; otherwise the directive itself is the
+   work input), run the `plan-work` skill, and follow its sizing: small →
+   solve directly and report; larger → produce the review-gated plan written
+   to disk under `.todo/` in the agent's cwd (`.todo` is gitignored — NEVER
+   `git add`/`git commit` it). The plan header MUST carry the issue
+   reference when the directive names one, and the directive text otherwise.
+   On completion the agent reports the plan file path, the issue number or
+   directive, and the number of units in the plan (for the small path: a
+   `solved directly` report instead), and stops.
 
 2. **Resolve the worker identity and pane address, then dispatch the kickoff
    as a correlated request and block on its outcome:**
@@ -108,9 +116,9 @@ Wait is not a manager operation: the only wait anywhere in this prompt is
 
 3. **Gate on the reply's status:**
 
-   - `DONE` → report back to the operator: agent name, issue, plan path,
-     number of units (parse them from the report; for a solved-directly
-     small issue, report that the issue was closed directly).
+   - `DONE` → report back to the operator: agent name, task (issue reference
+     or directive), plan path, number of units (parse them from the report;
+     for a solved-directly small task, report that it was closed directly).
    - `NEEDS_INPUT` or `BLOCKED` → surface the agent's questions verbatim and
      stop. Do not attempt to answer on the operator's behalf, and do not
      start execution.
