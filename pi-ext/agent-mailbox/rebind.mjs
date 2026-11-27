@@ -146,9 +146,11 @@ export function rebindRequester(options) {
  *
  * Both roles are rebound (issue#161): requests the pane SENT (requester
  * identity) and requests dispatched TO the pane (worker identity — without
- * this the replacement session cannot agent_reply them). A request can
- * appear in both lists only if the pane requested from and replied on the
- * same identity; the mailbox rebind no-op keeps that consistent.
+ * this the replacement session cannot agent_reply them). Each (role,
+ * fromIdentity) pair is delegated to rebindRole, so both passes share one
+ * traversal implementation. A pane that requested from and replied on the
+ * same identity is rebound through both roles; `rebound` reports each
+ * requestId at most once (R1.F2).
  *
  * Returns { rebound, replacement } (replacement = the latest entry, with the
  * effective target) or null when no replacement was recorded for the pane
@@ -171,43 +173,22 @@ export async function rebindPaneRequests({
   // (oldest first) with duplicates dropped.
   const fromIdentities = [...new Set(entries.map((entry) => entry.from))];
   const rebound = [];
-  // One list + one show per id, shared by both roles: extra subprocess calls
-  // would widen the window for concurrent delivery probes to settle records
-  // mid-rebind (observed as a flaky full-suite run), so records are read once
-  // and both role passes rebind from that snapshot.
-  const listed = await runMailboxImpl({ mailboxDir, args: ["list"] });
-  if (listed.code !== 0) {
-    throw new TypeError(`mailbox list failed (exit ${listed.code}): ${(listed.stderr || listed.stdout).trim()}`);
-  }
-  const ids = listed.stdout
-    .split("\n")
-    .map((line) => line.split("\t")[0].trim())
-    .filter(Boolean);
-  const records = [];
-  for (const requestId of ids) {
-    const shown = await runMailboxImpl({ mailboxDir, args: ["show", "--id", requestId] });
-    if (shown.code !== 0) continue;
-    try {
-      records.push({ requestId, record: JSON.parse(shown.stdout) });
-    } catch {
-      continue;
-    }
-  }
+  // The traversal itself is rebindRole's (R1.F3): one implementation of the
+  // list → show → filter → rebind walk for both callers.
   for (const role of ["requester", "worker"]) {
     for (const fromIdentity of fromIdentities) {
-      for (const { requestId, record } of records) {
-        if (record[role] !== fromIdentity) continue;
-        if (record.delivered) continue; // already delivered exactly once — leave it
-        const result = await runMailboxImpl({
-          mailboxDir,
-          args: ["rebind", "--id", requestId, `--${role}`, target],
-        });
-        if (
-          result.code === 0 &&
-          (result.stdout.startsWith("rebound ") || result.stdout.includes("already bound"))
-        ) {
-          rebound.push(requestId);
-        }
+      const { rebound: roleRebound } = await rebindRole({
+        mailboxDir,
+        role,
+        fromIdentity,
+        toIdentity: target,
+        runMailbox: runMailboxImpl,
+      });
+      // A request whose registered identity matches in both roles (the pane
+      // requested from and replied on the same identity) is rebound twice —
+      // report it once (R1.F2).
+      for (const requestId of roleRebound) {
+        if (!rebound.includes(requestId)) rebound.push(requestId);
       }
     }
   }
