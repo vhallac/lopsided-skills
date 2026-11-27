@@ -72,8 +72,9 @@ export async function latestReplacement(mailboxDir, paneName) {
 
 /**
  * Explicitly rebind every undelivered request whose registered identity in
- * the given role ("requester" or "worker") is fromIdentity to toIdentity,
- * via `mailbox rebind` (RC-4). Only undelivered records are touched — a reply
+ * the given role ("requester" or "worker") is one of fromIdentity (a single
+ * identity or a set — any membership matches) to toIdentity, via
+ * `mailbox rebind` (RC-4). Only undelivered records are touched — a reply
  * already delivered stays delivered (exactly once is mailbox-backed).
  * Returns { rebound: [requestIds] }.
  *
@@ -92,7 +93,12 @@ export async function rebindRole({
 }) {
   if (!mailboxDir) throw new TypeError("mailboxDir required");
   if (role !== "requester" && role !== "worker") throw new TypeError(`invalid role "${role}"`);
-  if (!fromIdentity || typeof fromIdentity !== "string") throw new TypeError("fromIdentity required");
+  // fromIdentity may be a single identity or a set — any membership matches
+  // (R2.F2: the mailbox is read once per role, not once per identity).
+  const fromSet = Array.isArray(fromIdentity) ? fromIdentity : [fromIdentity];
+  if (fromSet.length === 0 || !fromSet.every((id) => typeof id === "string" && id)) {
+    throw new TypeError("fromIdentity required");
+  }
   if (!toIdentity || typeof toIdentity !== "string") throw new TypeError("toIdentity required");
   const listed = await runMailboxImpl({ mailboxDir, args: ["list"] });
   if (listed.code !== 0) {
@@ -112,7 +118,7 @@ export async function rebindRole({
     } catch {
       continue;
     }
-    if (record[role] !== fromIdentity) continue;
+    if (!fromSet.includes(record[role])) continue;
     if (record.delivered) continue; // already delivered exactly once — leave it
     const result = await runMailboxImpl({
       mailboxDir,
@@ -174,22 +180,23 @@ export async function rebindPaneRequests({
   const fromIdentities = [...new Set(entries.map((entry) => entry.from))];
   const rebound = [];
   // The traversal itself is rebindRole's (R1.F3): one implementation of the
-  // list → show → filter → rebind walk for both callers.
+  // list → show → filter → rebind walk for both callers. One rebindRole call
+  // per role with the full from-identity set (R2.F2): the mailbox list is
+  // read once per role (2 list calls total), not once per (role, identity)
+  // pair.
   for (const role of ["requester", "worker"]) {
-    for (const fromIdentity of fromIdentities) {
-      const { rebound: roleRebound } = await rebindRole({
-        mailboxDir,
-        role,
-        fromIdentity,
-        toIdentity: target,
-        runMailbox: runMailboxImpl,
-      });
-      // A request whose registered identity matches in both roles (the pane
-      // requested from and replied on the same identity) is rebound twice —
-      // report it once (R1.F2).
-      for (const requestId of roleRebound) {
-        if (!rebound.includes(requestId)) rebound.push(requestId);
-      }
+    const { rebound: roleRebound } = await rebindRole({
+      mailboxDir,
+      role,
+      fromIdentity: fromIdentities,
+      toIdentity: target,
+      runMailbox: runMailboxImpl,
+    });
+    // A request whose registered identity matches in both roles (the pane
+    // requested from and replied on the same identity) is rebound twice —
+    // report it once (R1.F2).
+    for (const requestId of roleRebound) {
+      if (!rebound.includes(requestId)) rebound.push(requestId);
     }
   }
   return { rebound, replacement: { ...replacement, to: target } };
