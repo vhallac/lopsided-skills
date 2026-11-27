@@ -7,7 +7,7 @@
 #
 # Usage:
 #   herdr-plan-agent <name> --cwd <dir> [--tab <tab-id>] [--pane <pane-id>]
-#                    [--workspace <workspace-id>]
+#                    [--workspace <workspace-id>] [--model <spec>]
 #                    [--prompt-file <file> | --prompt <text>]
 #   echo "..." | herdr-plan-agent <name> --cwd <dir>
 #
@@ -21,6 +21,7 @@ PANE=""
 WORKSPACE="${HERDR_WORKSPACE_ID:-}"
 PROMPT_FILE=""
 PROMPT=""
+MODEL=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -30,12 +31,13 @@ while [ $# -gt 0 ]; do
     --workspace) WORKSPACE="$2"; shift 2 ;;
     --prompt-file) PROMPT_FILE="$2"; shift 2 ;;
     --prompt) PROMPT="$2"; shift 2 ;;
+    --model) MODEL="$2"; shift 2 ;;
     -*) echo "unknown option: $1" >&2; exit 2 ;;
     *) if [ -z "$NAME" ]; then NAME="$1"; else echo "unexpected arg: $1" >&2; exit 2; fi; shift ;;
   esac
 done
 
-[ -n "$NAME" ] || { echo "usage: herdr-plan-agent <name> --cwd <dir> [--prompt-file f|--prompt t]" >&2; exit 2; }
+[ -n "$NAME" ] || { echo "usage: herdr-plan-agent <name> --cwd <dir> [--model <spec>] [--prompt-file f|--prompt t]" >&2; exit 2; }
 
 # Read prompt from stdin if not given.
 if [ -z "$PROMPT" ] && [ -z "$PROMPT_FILE" ] && [ ! -t 0 ]; then
@@ -49,6 +51,7 @@ fi
 # Reuse existing agent.
 if herdr agent get "$NAME" >/dev/null 2>&1; then
   echo "agent '$NAME' already exists; reusing"
+  [ -z "$MODEL" ] || echo "note: --model ignored on reuse; it applies only at spawn" >&2
 else
   if [ -z "$PANE" ]; then
     if [ -z "$TAB" ]; then
@@ -67,7 +70,11 @@ else
     [ -n "$PANE" ] || { echo "no pane found in tab $TAB" >&2; exit 1; }
   fi
   echo "starting agent '$NAME' in pane $PANE..."
-  herdr agent start "$NAME" --kind pi --pane "$PANE"
+  if [ -n "$MODEL" ]; then
+    herdr agent start "$NAME" --kind pi --pane "$PANE" -- --model "$MODEL"
+  else
+    herdr agent start "$NAME" --kind pi --pane "$PANE"
+  fi
   echo "agent '$NAME' ready"
 fi
 

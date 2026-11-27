@@ -1,6 +1,6 @@
 ---
 description: Kick off a plan agent via the terminal manager and have it construct a plan from the operator's task directive
-argument-hint: "<agent-name> <task-directive...>"
+argument-hint: "<agent-name> <task-directive...> [--model <provider>/<model>[:<thinking>]]"
 ---
 
 The plan is always built from the project root: the cwd of the session
@@ -24,6 +24,14 @@ itself is the work input. Pass it verbatim: directives carry the operator's
 decisions and constraints — do not paraphrase, re-prioritize, or drop any
 of it.
 
+An optional `--model <provider>/<model>[:<thinking>]` flag selects the
+worker's model (pi parses the spec natively; pass it through verbatim —
+never split or rewrite it). Strip the flag and its value from the invocation
+arguments before applying the expansion above, so the task directive stays
+verbatim. Pass the model through the start/reuse op only: the model is
+pinned at spawn, so on a fresh spawn it takes effect, and when an existing
+agent is reused the flag is ignored — say so in the report to the operator.
+
 Requires the agent-mailbox pi extension in this session (`agent_request`,
 `agent_wait` tools available). If they are not, report NEEDS_INPUT saying so —
 do not degrade to sleep-based or pane-state polling.
@@ -43,7 +51,7 @@ manager commands:
 
 | Neutral op | hc binding | herdr binding |
 |---|---|---|
-| start/reuse worker | `hc run --bg --cwd <project-root> --name <pane-name> env AGENT_PANE=<pane-name> MAILBOX_DIR=<mailbox-store> pi` (start; reuse when `hc ls --json` already shows that name) | `herdr-plan-agent <name>` wrapper (starts or reuses the existing agent); the wrapper must be on PATH — the pi install does not put package `bin` entries there (see README Installation section); if not found, report NEEDS_INPUT saying so |
+| start/reuse worker | `hc run --bg --cwd <project-root> --name <pane-name> env AGENT_PANE=<pane-name> MAILBOX_DIR=<mailbox-store> pi [--model <spec>]` (start; reuse when `hc ls --json` already shows that name) | `herdr-plan-agent <name> [--model <spec>]` wrapper (starts or reuses the existing agent); the wrapper must be on PATH — the pi install does not put package `bin` entries there (see README Installation section); if not found, report NEEDS_INPUT saying so |
 | address map (agent name → mailbox identity + pane address) | `hc ls --json` → the terminal whose name is `<pane-name>`; that name is the mailbox identity, its id (e.g. `t12`) is the pane address | `herdr agent get <name>` → its `pane_id` is both the mailbox identity and the pane address |
 | deliver message | `hc send <pane-name> "<text>"` (non-blocking paste + enter; accepts a terminal address or a name) | `herdr agent prompt <name> -- "<text>"` (delivery only — never pass `--wait`, never use it as a wait) |
 | read pane tail | `hc read <pane-name>` | `herdr agent read <name> --source recent --lines N` |

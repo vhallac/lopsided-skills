@@ -170,3 +170,29 @@ test("C5: plan-kick renders the task directive; plan-drive renders directives", 
   assert.match(drive, /argument list of this invocation is: \$@/);
   assert.match(drive, /anything after `--` is an operator\s+directive/);
 });
+
+/**
+ * claim: driver-prompts-plan-kick-model/test_model_flag_rendered_into_start_op
+ * claim text: plan-kick accepts an optional --model <provider>/<model>[:<thinking>]
+ *   flag, pins it to the worker at spawn, and renders it into the start/reuse
+ *   resolution rows; on reuse the flag is ignored and reported, and the flag
+ *   is stripped from the task directive expansion.
+ * scenario: Scenario: model-pinned worker spawn — Given the invocation
+ *   `/plan-kick --model anthropic/claude-opus-4-6:high pr-96-review fix the
+ *   findings` When the template text is inspected Then the argument-hint
+ *   names the --model flag And the start/reuse rows carry [--model <spec>]
+ *   And a reuse-ignored rule is stated
+ */
+test("C6: plan-kick renders the --model flag into the start/reuse op", () => {
+  const kick = readPrompt("plan-kick.md");
+  const hint = kick.split("\n").find((l) => l.startsWith("argument-hint:")) ?? "";
+  assert.match(hint, /--model <provider>\/<model>\[:<thinking>\]/);
+  const block = resolutionBlock("plan-kick.md");
+  const startRow = block.find((l) => l.startsWith("| start/reuse worker"));
+  assert.ok(startRow, "plan-kick.md has a start/reuse row");
+  assert.match(startRow, /pi \[--model <spec>\]/);
+  assert.match(startRow, /herdr-plan-agent <name> \[--model <spec>\]/);
+  assert.match(kick, /pinned at spawn/);
+  assert.match(kick, /reused the flag is ignored/);
+  assert.match(kick, /Strip the flag and its value from the invocation\narguments/);
+});
