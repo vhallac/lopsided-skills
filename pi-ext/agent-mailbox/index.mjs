@@ -555,6 +555,10 @@ export default function agentMailboxExtension(pi, options = {}) {
     });
     delivery.onSessionShutdown();
   });
+  // Issue#102: expose the delivery hooks so tests can await the fire-and-forget
+  // lifecycle probe (hooks.lastProbe) deterministically. Production callers
+  // ignore the return value.
+  return delivery;
 }
 
 /** Convenience: resolve another pane's session identity (used by later units). */

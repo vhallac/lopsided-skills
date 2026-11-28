@@ -315,10 +315,13 @@ test("agent_rebind after double restart rebinds the full replacement chain (S1 a
   });
 
   // Two rapid restarts: S2 takes over the pane, registers its own request
-  // and gets a reply; then S3 takes over again.
+  // and gets a reply; then S3 takes over again. Each session_start fires a
+  // background delivery probe; await it (issue#102) so the explicit
+  // probeDeliveries calls below never race the fire-and-forget probe.
   let pi = fakePi();
-  agentMailboxExtension(pi, { mailboxDir, paneName: "driver-a", sessionId: "sess-2" });
+  let ext = agentMailboxExtension(pi, { mailboxDir, paneName: "driver-a", sessionId: "sess-2" });
   await pi.handlers.session_start({}, {});
+  await ext?.lastProbe;
   const { requestId: r2 } = await dispatchRequest({
     mailboxDir, worker: "worker-b", instruction: "second", requesterIdentity: "sess-2",
   });
@@ -327,8 +330,9 @@ test("agent_rebind after double restart rebinds the full replacement chain (S1 a
   });
 
   pi = fakePi();
-  agentMailboxExtension(pi, { mailboxDir, paneName: "driver-a", sessionId: "sess-3" });
+  ext = agentMailboxExtension(pi, { mailboxDir, paneName: "driver-a", sessionId: "sess-3" });
   await pi.handlers.session_start({}, {});
+  await ext?.lastProbe;
 
   // Before the rebind, neither era's reply is deliverable to sess-3.
   let probe = await probeDeliveries({ mailboxDir, requesterIdentity: "sess-3" });

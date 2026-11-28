@@ -226,9 +226,11 @@ test("createDeliveryHooks wires session lifecycle probes with an idle timer", as
   });
 
   // Session start probe delivers the pre-persisted reply (idle case) and
-  // starts the idle poll timer.
+  // starts the idle poll timer. Await the probe itself (issue#102) instead
+  // of a fixed sleep: mailbox CLI children under a loaded suite can exceed
+  // any fixed wait.
   hooks.onSessionStart(null);
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  await hooks.lastProbe;
   assert.equal(sent.length, 1);
   assert.deepEqual(sent[0].opts, { triggerTurn: true });
   assert.match(sent[0].message.content, new RegExp(requestId));
