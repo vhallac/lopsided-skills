@@ -127,6 +127,18 @@ For each fired phase:
 
 Treat "unvalidated sink reachable" as a security claim subject to the same counterexample construction as any other claim.
 
+### Concurrency phase (shared state)
+
+**Trigger:** the change touches shared mutable state — state reachable from more than one process, thread, coroutine, or task without a single owner of the mutation order (shared memory, files, databases, caches, message queues, global/static variables, instance fields accessed across call boundaries).
+
+**Procedure.**
+
+1. **Shared-state detection.** Identify each piece of state the change reads or writes and determine whether more than one execution context can reach it. State confined to one request, one task, or one thread's lifetime is not shared; state that survives across them (queues, tables, files, shared maps, singleton fields) is. Detection must be from the change's shape, not from whether any extracted claim mentions concurrency — the phase exists to catch what claims do not state.
+2. **Interleaving enumeration.** For each shared-state access the change introduces or modifies, enumerate the exposed operations on that state and check each interleaving against the intended semantics: check-then-act windows (read, decide, write), read-modify-write pairs, torn multi-field invariants, initialization races, and lost updates. Where the intended semantics are undocumented, the gap itself is a finding.
+3. **Probe guidance.** For a live system, a suspected interleaving is confirmed by a probe (e.g. concurrent invocations of the exposed operations, or an induced delay between the read and the write). If the probe cannot be executed read-only, report the risk and the specific probe needed as a finding rather than executing it.
+
+Classify each shared-state access as **protected** (mutation order is enforced by a mechanism sufficient for the semantics — lock, transaction, single-writer, idempotent replay), **unprotected interleaving reachable**, or **no interleaving exposure**. Treat "unprotected interleaving reachable" as a claim subject to the same counterexample construction as any other claim.
+
 ## Defaults, fallbacks, and transformations
 
 ### Transformations and derived representations
