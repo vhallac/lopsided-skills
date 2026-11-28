@@ -99,6 +99,34 @@ For each significant test:
 
 If a test explicitly asserts behavior that contradicts the documented or accepted contract, report the contradiction.
 
+## Shape-driven phases
+
+After the claim-driven falsification work is complete, run each phase trigger against the change's **shape** — properties of the change itself, not of any extracted claim. Phases come after the claim work, never before it.
+
+A trigger that matches the change's shape **fires**; a trigger that does not match is recorded in the **Verification assessment** as *not applicable because \<reason\>*. A phase's firing never depends on a claim mentioning the phase's risk class: shape-driven phases exist to catch what the claims do not state.
+
+For each fired phase:
+
+1. Run the phase's own falsification procedure, appropriate to the phase's risk class (defined per phase below).
+2. Grade what the procedure produces per the existing severity scheme; phase findings enter the severity ladder and verdict mapping normally, like any other finding.
+3. If the phase would need to execute a probe on a live system and cannot do so read-only, report the risk and the specific probe needed as a finding rather than executing it — the existing read-only execution rule applies unchanged.
+4. If the procedure yields nothing, the phase contributes no finding; the not-applicable record is only for phases whose trigger did not fire.
+
+**Aggregation.** The verdict aggregates phase findings together with claim-driven findings per the existing verdict mapping. When two phases report overlapping findings for the same defect, deduplicate at aggregation and cite both phases in the surviving finding.
+
+### Security phase (Trust boundaries)
+
+**Trigger:** the change touches an input path crossing a trust boundary (HTTP, CLI arg, env var, file, queue message, API payload).
+
+**Procedure.** For every changed input path (HTTP, CLI arg, env var, file, queue message, API payload):
+
+- trace from entry point to dangerous sink (exec, SQL, file write, template, eval, deserialization) and identify where untrusted data crosses a trust boundary;
+- check whether secrets, tokens, or credentials can appear in logs, error messages, or artifacts;
+- check whether the change weakens, bypasses, or skips an authorization, authentication, or validation check — including via early-return/fallback paths inspected during the claim-driven work;
+- classify the trace as **validated boundary**, **unvalidated sink reachable**, or **no sink**.
+
+Treat "unvalidated sink reachable" as a security claim subject to the same counterexample construction as any other claim.
+
 ## Defaults, fallbacks, and transformations
 
 ### Transformations and derived representations
@@ -144,17 +172,6 @@ For every changed default or configuration contract:
 - determine whether behavior changed for users who do not explicitly configure the setting.
 
 Check whether a changed default alters cost, security, retention, compatibility, resource use, or externally observable behavior.
-
-### Trust boundaries and attack surface
-
-For every changed input path (HTTP, CLI arg, env var, file, queue message, API payload):
-
-- trace from entry point to dangerous sink (exec, SQL, file write, template, eval, deserialization) and identify where untrusted data crosses a trust boundary;
-- check whether secrets, tokens, or credentials can appear in logs, error messages, or artifacts;
-- check whether the change weakens, bypasses, or skips an authorization, authentication, or validation check — including via the early-return/fallback paths already inspected above;
-- classify the trace as **validated boundary**, **unvalidated sink reachable**, or **no sink**.
-
-Treat "unvalidated sink reachable" as a security claim subject to the same counterexample construction as any other claim.
 
 ## Code quality
 
