@@ -110,6 +110,10 @@ export function createDeliveryHooks(pi, options = {}) {
   const seen = new Set();
   let inFlight = false;
   let timer = null;
+  // Most recently started probe promise (issue#102): lets tests await the
+  // fire-and-forget lifecycle probes deterministically instead of sleeping
+  // on wall-clock timers. Not used by production callers.
+  let lastProbe = null;
 
   const resolveIdentity = async (paneName) => {
     if (options.requesterIdentity) return options.requesterIdentity;
@@ -119,23 +123,26 @@ export function createDeliveryHooks(pi, options = {}) {
     return own?.sessionId ?? null;
   };
 
-  const probe = async (paneName) => {
-    if (!mailboxDir || inFlight) return;
+  const probe = (paneName) => {
+    if (!mailboxDir || inFlight) return lastProbe;
     inFlight = true;
-    try {
-      const requesterIdentity = await resolveIdentity(paneName);
-      await probeDeliveries({
-        mailboxDir,
-        requesterIdentity,
-        seen,
-        sendMessage: (message, opts) => pi.sendMessage(message, opts),
-      });
-    } catch {
-      // Delivery is best-effort: the mailbox persists the reply and a later
-      // probe (or agent_wait) still delivers it.
-    } finally {
-      inFlight = false;
-    }
+    lastProbe = (async () => {
+      try {
+        const requesterIdentity = await resolveIdentity(paneName);
+        await probeDeliveries({
+          mailboxDir,
+          requesterIdentity,
+          seen,
+          sendMessage: (message, opts) => pi.sendMessage(message, opts),
+        });
+      } catch {
+        // Delivery is best-effort: the mailbox persists the reply and a later
+        // probe (or agent_wait) still delivers it.
+      } finally {
+        inFlight = false;
+      }
+    })();
+    return lastProbe;
   };
 
   return {
@@ -155,6 +162,11 @@ export function createDeliveryHooks(pi, options = {}) {
         clearInterval(timer);
         timer = null;
       }
+    },
+    // Awaitable seam for tests: resolves when the most recent probe finishes
+    // (null if no probe has started).
+    get lastProbe() {
+      return lastProbe;
     },
   };
 }
