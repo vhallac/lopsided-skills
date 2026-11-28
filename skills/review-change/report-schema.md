@@ -45,11 +45,11 @@ In this order, each a `##` heading:
 
 1. **Header** — target(s), selected mode and why, commit range and merge-base, delta since last round, evidence inspected, material claims extracted for falsification, any ignored markers.
 2. **Prior findings** — one line per earlier finding with its decision and current status (`rounds.md`). Omit in round 1.
-3. **Findings** — `#### F<n> — <Severity>: <summary>` blocks with all eight fields (`method.md`, *Severity*), including the likelihood grade (`method.md`, *Likelihood*).
+3. **Findings** — `#### F<n> — <Severity>: <summary>` blocks with all eight fields (`method.md`, *Severity*), including the likelihood grade (`method.md`, *Likelihood*). Phase findings are ordinary findings: a finding produced by a shape-driven phase (`method.md`, *Shape-driven phases*) enters this list and the frontmatter `findings` exactly like a claim-driven finding, with the phase named in the block (e.g. `phase: concurrency`). When two phases reported the same defect, the deduplicated surviving finding cites both phases.
 4. **Unrelated problems** — `#### U<n>: <summary>` blocks: anchor, concrete problem, evidence, likely consequence, suggested follow-up work item. Say so if none.
 5. **Requirement traceability** — table: requirement or claim | evidence | status | gap/note. Statuses: supported, contradicted, partially supported, unverified, not applicable.
 6. **Design-decision matrix** — table: decision | why relevant | result (complies / possible tension / violates / not applicable) | evidence.
-7. **Verification assessment** — evidence per conclusion, checks run or inspected, counterexamples attempted, paths examined, claims still unverified, limitations of the review.
+7. **Verification assessment** — evidence per conclusion, checks run or inspected, counterexamples attempted, paths examined, claims still unverified, limitations of the review. Record here every phase whose trigger did not fire, as *not applicable because <reason>* (`method.md`, *Shape-driven phases*); a fired phase that yielded nothing needs no record beyond the check itself.
 8. **Verdict** — the verdict and the finding IDs that determined it (`method.md`, *Verdict*).
 
 Frontmatter and body must agree: every finding in the body appears in `findings` with the same ID, severity, likelihood and summary, and vice versa. `publish-review` refuses a report where they disagree.
