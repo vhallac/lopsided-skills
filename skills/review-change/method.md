@@ -99,6 +99,46 @@ For each significant test:
 
 If a test explicitly asserts behavior that contradicts the documented or accepted contract, report the contradiction.
 
+## Shape-driven phases
+
+After the claim-driven falsification work is complete, run each phase trigger against the change's **shape** — properties of the change itself, not of any extracted claim. Phases come after the claim work, never before it.
+
+A trigger that matches the change's shape **fires**; a trigger that does not match is recorded in the **Verification assessment** as *not applicable because \<reason\>*. A phase's firing never depends on a claim mentioning the phase's risk class: shape-driven phases exist to catch what the claims do not state.
+
+For each fired phase:
+
+1. Run the phase's own falsification procedure, appropriate to the phase's risk class (defined per phase below).
+2. Grade what the procedure produces per the existing severity scheme; phase findings enter the severity ladder and verdict mapping normally, like any other finding.
+3. If the phase would need to execute a probe on a live system and cannot do so read-only, report the risk and the specific probe needed as a finding rather than executing it — the existing read-only execution rule applies unchanged.
+4. If the procedure yields nothing, the phase contributes no finding; the not-applicable record is only for phases whose trigger did not fire.
+
+**Aggregation.** The verdict aggregates phase findings together with claim-driven findings per the existing verdict mapping. When two phases report overlapping findings for the same defect, deduplicate at aggregation and cite both phases in the surviving finding.
+
+### Security phase (Trust boundaries)
+
+**Trigger:** the change touches an input path crossing a trust boundary (HTTP, CLI arg, env var, file, queue message, API payload).
+
+**Procedure.** For every changed input path (HTTP, CLI arg, env var, file, queue message, API payload):
+
+- trace from entry point to dangerous sink (exec, SQL, file write, template, eval, deserialization) and identify where untrusted data crosses a trust boundary;
+- check whether secrets, tokens, or credentials can appear in logs, error messages, or artifacts;
+- check whether the change weakens, bypasses, or skips an authorization, authentication, or validation check — including via early-return/fallback paths inspected during the claim-driven work;
+- classify the trace as **validated boundary**, **unvalidated sink reachable**, or **no sink**.
+
+Treat "unvalidated sink reachable" as a security claim subject to the same counterexample construction as any other claim.
+
+### Concurrency phase (shared state)
+
+**Trigger:** the change touches shared mutable state — state reachable from more than one process, thread, coroutine, or task without a single owner of the mutation order (shared memory, files, databases, caches, message queues, global/static variables, instance fields accessed across call boundaries).
+
+**Procedure.**
+
+1. **Shared-state detection.** Identify each piece of state the change reads or writes and determine whether more than one execution context can reach it. State confined to one request, one task, or one thread's lifetime is not shared; state that survives across them (queues, tables, files, shared maps, singleton fields) is. Detection must be from the change's shape, not from whether any extracted claim mentions concurrency — the phase exists to catch what claims do not state.
+2. **Interleaving enumeration.** For each shared-state access the change introduces or modifies, enumerate the exposed operations on that state and check each interleaving against the intended semantics: check-then-act windows (read, decide, write), read-modify-write pairs, torn multi-field invariants, initialization races, and lost updates. Where the intended semantics are undocumented, the gap itself is a finding.
+3. **Probe guidance.** For a live system, a suspected interleaving is confirmed by a probe (e.g. concurrent invocations of the exposed operations, or an induced delay between the read and the write). If the probe cannot be executed read-only, report the risk and the specific probe needed as a finding rather than executing it.
+
+Classify each shared-state access as **protected** (mutation order is enforced by a mechanism sufficient for the semantics — lock, transaction, single-writer, idempotent replay), **unprotected interleaving reachable**, or **no interleaving exposure**. Treat "unprotected interleaving reachable" as a claim subject to the same counterexample construction as any other claim.
+
 ## Defaults, fallbacks, and transformations
 
 ### Transformations and derived representations
@@ -144,17 +184,6 @@ For every changed default or configuration contract:
 - determine whether behavior changed for users who do not explicitly configure the setting.
 
 Check whether a changed default alters cost, security, retention, compatibility, resource use, or externally observable behavior.
-
-### Trust boundaries and attack surface
-
-For every changed input path (HTTP, CLI arg, env var, file, queue message, API payload):
-
-- trace from entry point to dangerous sink (exec, SQL, file write, template, eval, deserialization) and identify where untrusted data crosses a trust boundary;
-- check whether secrets, tokens, or credentials can appear in logs, error messages, or artifacts;
-- check whether the change weakens, bypasses, or skips an authorization, authentication, or validation check — including via the early-return/fallback paths already inspected above;
-- classify the trace as **validated boundary**, **unvalidated sink reachable**, or **no sink**.
-
-Treat "unvalidated sink reachable" as a security claim subject to the same counterexample construction as any other claim.
 
 ## Code quality
 
