@@ -424,7 +424,7 @@ export function createTools(options = {}) {
       name: "agent_rebind",
       label: "Agent Rebind",
       description:
-        "Explicitly rebind a pane's pending requests from its previous session identity to the replacement session (RC-4). Required after a pane restart: without it, the new session never receives the old session's replies (EXT-4d).",
+        "Rebind this pane's pending requests from its previous session identities to the current one (RC-4). Covers both roles of every pending request — as requester (replies deliver to the replacement) and as worker (the replacement can agent_reply them; without it a restarted worker is stuck forever, issue#161). Use after a pane restart.",
       parameters: {
         type: "object",
         properties: {
